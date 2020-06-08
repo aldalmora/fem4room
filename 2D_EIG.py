@@ -15,7 +15,7 @@ def g(x,y):
     return 0*x
 
 r = 1
-_h =  [0.1,0.08,0.06,0.04,0.01,0.007]
+_h =  [0.1,0.08,0.06,0.04,0.02]
 order = 2
 formule = 2
 
@@ -62,7 +62,7 @@ for h in _h:
     # plt.show()
 
     t1 = time.time()
-    w,v = sla.eigs(K,20,M,sigma=0,which='LM')
+    w,v = sla.eigs(K,20,M,sigma=0,which='LM') #Change to Solver
     t2 = time.time()
     t_eigs.append(t2-t1)
     print('EIGS - ' + str(t2-t1))

@@ -23,7 +23,7 @@ class Newmark:
         self.alpha = alpha
         self.delta = delta
         self.dt = dt
-        self.a0 = 1/(alpha*dt**2)
+        self.a0 = 1/(alpha*(dt**2))
         self.a1 = delta/(alpha*dt)
         self.a2 = 1/(alpha*dt)
         self.a3 = 1/(2*alpha) - 1
@@ -37,41 +37,77 @@ class Newmark:
         self.M = M
         self.C = C
         sla.use_solver(useUmfpack=True)
-        self.Keff = K + self.a0*M + self.a1*C
+        self.Keff = K + M.multiply(self.a0) + C.multiply(self.a1)
         self.Keff.indices = self.Keff.indices.astype(np.int64)
         self.Keff.indptr = self.Keff.indptr.astype(np.int64)
 
-    def solve(self,f,t,u0,du0,ddu0,main_ddl,saved_ddls,save_time_step):
-        self.tmax = t
-        self.t = 0
+    def solve(self,tspan,f,u0,du0,ddu0,main_ddls,saved_ddls,save_time_step):
+        self.tspan=tspan
         Keff_solve = sla.factorized(self.Keff)
-        tspan = [self.t]
         ret_u = [u0[saved_ddls]]
-        ret_main_ddl=[u0[main_ddl]]
+        ret_main_ddls=[u0[main_ddls]]
         u = u0
         du = du0
         ddu= ddu0
-        tcount=0
-        while (self.t <= self.tmax):
-            f_new = f(self.t+self.dt)
+        for i in range(1,len(tspan)):
+            f_new = -f(i)
             u,du,ddu = self.iterate(Keff_solve,f_new,u,du,ddu)
-            tcount+=1
-            ret_main_ddl.append(u[main_ddl])
-            if tcount % save_time_step < 1e-20:
+            ret_main_ddls.append(u[main_ddls])
+            if i % save_time_step < 1e-20:
                 ret_u.append(u[saved_ddls])
-            self.t += self.dt
-            tspan.append(self.t)
 
         ret_u = np.array(ret_u)
-        ret_main_ddl = np.array(ret_main_ddl)
-        tspan = np.array(tspan)
+        ret_main_ddls = np.array(ret_main_ddls)
         self.u = ret_u
-        self.tspan = tspan
-        return tspan,ret_u,ret_main_ddl
+        return ret_u,ret_main_ddls
 
     def iterate(self,Keff_solve,f_new,u,du,ddu):
-        R_new = f_new + self.M*(self.a0*u + self.a2*du + self.a3*ddu) + self.C*(self.a1*u + self.a4*du + self.a5*ddu)
+        R_new = f_new + self.M.dot(self.a0*u + self.a2*du + self.a3*ddu) + self.C.dot(self.a1*u + self.a4*du + self.a5*ddu)
         u_new = Keff_solve(R_new)
         ddu_new = self.a0*(u_new - u) - self.a2*du - self.a3*ddu
         du_new = du + self.a6*ddu + self.a7*ddu_new
         return u_new,du_new,ddu_new
+
+class LeapFrog():
+    #(M + dt*C + (dt**2)*K) u_new = (2M + dt*C) u1 - M u0 - (dt**2)f[n+1]
+    def __init__(self,M,C,K,dt):
+        self.dt = dt
+        self.tspan = []
+        self.u = []
+
+        self.M = M
+        self.C = C
+        self.K = K
+        sla.use_solver(useUmfpack=True)
+        self.sys = M + dt*C + (dt**2)*K
+        self.sys.indices = self.sys.indices.astype(np.int64)
+        self.sys.indptr = self.sys.indptr.astype(np.int64)
+
+        self.a0 = self.M.multiply(2) + self.C.multiply(self.dt)
+        self.a1 = self.dt**2
+
+    def solve(self,tspan,f,u0,du0,ddu0,main_ddls,saved_ddls,save_time_step):
+        self.tspan=tspan
+        sys_solve = sla.factorized(self.sys)
+        ret_u = [u0[saved_ddls]]
+        ret_main_ddls=[u0[main_ddls]]
+        u0 = u0
+        u1 = u0
+        for i in range(1,len(tspan)):
+            f_new = -f(i)
+            u_new = self.iterate(sys_solve,f_new,u0,u1)
+            ret_main_ddls.append(u_new[main_ddls])
+            if i % save_time_step < 1e-20:
+                ret_u.append(u_new[saved_ddls])
+            u0=u1
+            u1=u_new
+
+        ret_u = np.array(ret_u)
+        ret_main_ddls = np.array(ret_main_ddls)
+        self.u = ret_u
+        return ret_u,ret_main_ddls
+
+    def iterate(self,sys_solve,f_new,u0,u1):
+        R_new = self.a0*u1 - self.M.dot(u0) - self.a1*f_new
+        u_new = sys_solve(R_new)
+        return u_new

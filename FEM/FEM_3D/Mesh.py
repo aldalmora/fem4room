@@ -3,6 +3,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class Mesh:
+    @staticmethod
+    def MeshCube(name,Lx,Ly,Lz,h,order=1):
+        m = Mesh('Mesh3D')
+        cTag = m.createCube(Lx,Ly,Lz)
+        m.fac.synchronize()
+        dt_Boundary = m.model.getBoundary(cTag,recursive=True)
+        m.model.occ.setMeshSize(dt_Boundary,h)
+        m.fac.synchronize()
+        m.generate(order=order)
+        return m
+
     def __init__(self, name):
         gmsh.initialize()
         gmsh.model.add(name)

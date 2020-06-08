@@ -9,11 +9,11 @@ from scipy.sparse.csgraph import reverse_cuthill_mckee
 
 L = 2*np.pi
 _h = [0.1,0.08,0.04,0.02]
-orders = [1]
+orders = [1,2]
 formule = 2
 plot=0
-plot_errors=0
-plot_time=1
+plot_errors=1
+plot_time=0
 
 qtd_vtx = []
 t_init = []

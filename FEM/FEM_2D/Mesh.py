@@ -3,6 +3,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class Mesh:
+    @staticmethod
+    def MeshSquare(name,Lx,Ly,h,order=1):
+        m = Mesh('Mesh2D')
+        elements = m.createSurface([[0,0,0],[Lx,0,0],[Lx,Ly,0],[0,Ly,0]],h=h)
+        m.fac.addPlaneSurface([elements[-1]])
+        m.generate(order=order)
+        return m
+
     def __init__(self, name):
         gmsh.initialize()
         gmsh.model.add(name)

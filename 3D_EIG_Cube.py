@@ -20,7 +20,7 @@ plotErrors=0
 Lx=1
 Ly=1.1
 Lz=1.2
-_h =[0.06,0.05,0.04,0.03,0.02]
+_h =[0.06,0.05,0.04,0.03]
 
 #Exact eigenvalues of a cube
 _ev_cube=[]

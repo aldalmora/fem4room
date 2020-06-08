@@ -1,4 +1,5 @@
 import scipy.sparse.linalg as sla
+from scipy.sparse.csgraph import reverse_cuthill_mckee
 import scikits.umfpack
 
 class umfLA(sla.LinearOperator):
@@ -18,13 +19,13 @@ class Solver():
         mi = umfLA(A)
         return sla.eigsh(A,k,M,sigma=sigma,which=which,OPinv=mi)
 
-    def solve(self,f,dirichlet_mesh_group=-1):
+    def solve(self,f):
         A = self.engine.K_Matrix() + self.engine.M_Matrix()
         F = self.engine.F_Matrix(f)
 
-        # idx_rcm = reverse_cuthill_mckee(A)
-        # A = A[idx_rcm,:]
-        # A = A[:,idx_rcm]
-        # F = F[idx_rcm]
+        idx_rcm = reverse_cuthill_mckee(A)
+        A = A[idx_rcm,:]
+        A = A[:,idx_rcm]
+        F = F[idx_rcm]
         
         return sla.spsolve(A,F)
