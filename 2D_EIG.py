@@ -7,11 +7,12 @@ import numpy.linalg as la
 import time
 
 import FEM.FEM_2D as fem
+from FEM import Boundary
 
 def f(x,y):
     return 0*x
 
-def g(x,y):
+def g(x,y,z):
     return 0*x
 
 r = 1
@@ -40,7 +41,7 @@ for h in _h:
 
     K = engine.K_Matrix()
 
-    K,M,F,G_Boundary,ddl_interior_idx,ddl_boundary_idx = engine.Boundary.Apply_Dirichlet(1,K,M,f,g)
+    K,M,F,G_Boundary,ddl_interior_idx,ddl_boundary_idx = Boundary.Apply_Dirichlet(engine,1,K,M,f,g)
 
     #Matrices bandwidth optimization
     idx_rcm = reverse_cuthill_mckee(K)

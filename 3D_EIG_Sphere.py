@@ -1,5 +1,5 @@
 import FEM.FEM_3D as fem
-import FEM.Solver as femSolver
+from FEM import Solver,Boundary
 import numpy as np
 import numpy.linalg as la
 import gmsh
@@ -52,13 +52,13 @@ for h in _h:
     K = engine.K_Matrix()
     M = engine.M_Matrix()
     t2m = time.time()
-    K,M,F,G_Boundary,ddl_interior_idx,ddl_boundary_idx = engine.Boundary.Apply_Dirichlet(1,K,M,f,g)
+    K,M,F,G_Boundary,ddl_interior_idx,ddl_boundary_idx = Boundary.Apply_Dirichlet(engine,1,K,M,f,g)
     t_matrices.append(t2m-t1m)
 
     nddls.append(K.shape[0])
 
     t1e = time.time()
-    solver = femSolver.Solver(engine)
+    solver = Solver(engine)
     ev,v = solver.eig(K,M,30,sigma=0,which='LM')
     t2e = time.time()
     t_eigs.append(t2e-t1e)

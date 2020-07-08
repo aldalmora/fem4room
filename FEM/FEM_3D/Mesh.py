@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 class Mesh:
     @staticmethod
     def MeshCube(name,Lx,Ly,Lz,h,order=1):
+        """ Create and return an instance of a cubic mesh. """
         m = Mesh('Mesh3D')
         cTag = m.createCube(Lx,Ly,Lz)
         m.fac.synchronize()
@@ -29,13 +30,15 @@ class Mesh:
         K = self.vertices[self.tetrahedrons]
         
         #Structure of K:
-        #x = Tk(xhat) = Ax + (x1) ; for Xhat 1(0,0,0), 2(1,0,0), 3(0,1,0) and 4(0,0,1):
+        #x = Tk(xhat) = A(xhat) + (x1) ; for Xhat 1(0,0,0), 2(1,0,0), 3(0,1,0) and 4(0,0,1):
+
         #A = (x2 x3 x4) - (x1)
         K = np.moveaxis(K,2,1)
-        K[:,:,1] = K[:,:,1] - K[:,:,0] 
+        K[:,:,1] = K[:,:,1] - K[:,:,0]
         K[:,:,2] = K[:,:,2] - K[:,:,0]
         K[:,:,3] = K[:,:,3] - K[:,:,0]
         K = K[:,:,1:4]
+        self.transform_matrix = K
 
         #Inverse of 3x3
         a = K[:,0,0];b = K[:,0,1];c = K[:,0,2]
@@ -49,10 +52,12 @@ class Mesh:
         self.inverses = np.moveaxis(1/self.determinants * aux,2,0)
 
     def createCube(self, dx,dy,dz):
+        """ Add a cube to the mesh. """
         bTag = self.fac.addBox(0,0,0,dx,dy,dz)
         return (3,bTag)
 
     def createSphere(self, x, y, z, radius):
+        """ Add a sphere to the mesh. """
         sTag = self.fac.addSphere(x,y,z,radius)
         return (3,sTag)
 
@@ -75,12 +80,14 @@ class Mesh:
             tnodes = self.model.mesh.getNodesByElementType(4)
             unique, unique_indexes, unique_inverse = np.unique(tnodes[0],return_index=True,return_inverse=True)
             self.nodeTags = unique
+            self.tetraTags = self.model.mesh.getElementsByType(4)[0]
             self.vertices = tnodes[1].reshape(-1,3)[unique_indexes]
             self.tetrahedrons = unique_inverse.reshape(-1,4)
         elif order==2:
             tnodes = self.model.mesh.getNodesByElementType(11)
             unique, unique_indexes, unique_inverse = np.unique(tnodes[0],return_index=True,return_inverse=True)
             self.nodeTags = unique
+            self.tetraTags = self.model.mesh.getElementsByType(11)[0]
             self.vertices = tnodes[1].reshape(-1,3)[unique_indexes]
             self.tetrahedrons = unique_inverse.reshape(-1,10)
 

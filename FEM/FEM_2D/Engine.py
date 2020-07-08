@@ -1,14 +1,13 @@
 import numpy as np
 import scipy.sparse as sparse
 
-from .Boundary import Boundary
 
 class Engine:
-    def __init__(self,mesh,order,formule):
+    def __init__(self,mesh,order,formule,calcForMass3D=False):
         self.order = order
         self.formule = formule
         self.mesh = mesh
-        self.Boundary = Boundary(self)
+        self.calcForMass3D = calcForMass3D
         self.ddl,self.numDdl,self.u,self.dxu,self.dyu,self.omega = self.initializeMatrices('Lagrange')
         
     def IntegrationPointsHat(self,formule: int):
@@ -69,14 +68,18 @@ class Engine:
                 ddl = mesh.vertices
                 numDdl = np.array(mesh.triangles,dtype=np.int32)
 
-            mesh.calcJacobians()
-            detJ = mesh.determinants
-            J_inv = mesh.inverses
+            if (not self.calcForMass3D):
+                mesh.calcJacobians()
+                areas_ratio = mesh.determinants
+                J_inv = mesh.inverses
+                dxhat_dx = J_inv[:,0,0]
+                dxhat_dy = J_inv[:,0,1]
+                dyhat_dx = J_inv[:,1,0]
+                dyhat_dy = J_inv[:,1,1]
+            else:
+                mesh.calcAreas3D()
+                areas_ratio = mesh.areas / mesh.area_triangle_ref
                 
-            dxhat_dx = J_inv[:,0,0]
-            dxhat_dy = J_inv[:,0,1]
-            dyhat_dx = J_inv[:,1,0]
-            dyhat_dy = J_inv[:,1,1]
 
             N_ddl = len(ddl)
             N_int = len(mesh.triangles)*len(xhat)
@@ -99,15 +102,16 @@ class Engine:
 
             for iloc in range(0,len(xhat)): #Points of Integration
                 iglob = np.arange(iloc,N_int,len(xhat),dtype=np.int32)
-                omega[iglob] = omegaloc[iloc] * (detJ)
+                omega[iglob] = omegaloc[iloc] * areas_ratio
                 for jloc in range(0,len(phi[0])): #Base functions
                     _idx = jloc*N_int + iloc*len(iglob) + np.arange(0,len(iglob)) #Global stacked index for the sparse matrix
                     jglob = numDdl[:,jloc]
                     _i[_idx] = iglob
                     _j[_idx] = jglob
                     _v_u[_idx] = np.ones(len(iglob))*phi[iloc,jloc]
-                    _v_dxu[_idx] = (dxphi[iloc,jloc]*dxhat_dx + dyphi[iloc,jloc]*dyhat_dx)
-                    _v_dyu[_idx] = (dxphi[iloc,jloc]*dxhat_dy + dyphi[iloc,jloc]*dyhat_dy)
+                    if not self.calcForMass3D:
+                        _v_dxu[_idx] = (dxphi[iloc,jloc]*dxhat_dx + dyphi[iloc,jloc]*dyhat_dx)
+                        _v_dyu[_idx] = (dxphi[iloc,jloc]*dxhat_dy + dyphi[iloc,jloc]*dyhat_dy)
                     # u[iglob,jglob] = phi[iloc,jloc]
                     # dxu[iglob,jglob] = (dxphi[iloc,jloc]*dxhat_dx + dyphi[iloc,jloc]*dyhat_dx) 
                     # dyu[iglob,jglob] = (dxphi[iloc,jloc]*dxhat_dy + dyphi[iloc,jloc]*dyhat_dy)

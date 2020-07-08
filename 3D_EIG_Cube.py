@@ -1,5 +1,5 @@
 import FEM.FEM_3D as fem
-import FEM.Solver as femSolver
+from FEM import Boundary,Solver
 import numpy as np
 import numpy.linalg as la
 import gmsh
@@ -14,13 +14,13 @@ t_matrices = []
 t_eigs = []
 nddls = []
 printEigs=0
-showModes=1
-plotErrors=0
+showModes=0
+plotErrors=1
 
 Lx=1
 Ly=1.1
 Lz=1.2
-_h =[0.06,0.05,0.04,0.03]
+_h =[0.07,0.06,0.05,0.04]
 
 #Exact eigenvalues of a cube
 _ev_cube=[]
@@ -65,7 +65,7 @@ for h in _h:
     writeStatus('Calculating M Matrix.')
     M = engine.M_Matrix()
     writeStatus('Applying Dirichlet.')
-    K,M,F,G_Boundary,ddl_interior_idx,ddl_boundary_idx = engine.Boundary.Apply_Dirichlet(1,K,M,f,g)
+    K,M,F,G_Boundary,ddl_interior_idx,ddl_boundary_idx = Boundary.Apply_Dirichlet(engine, 1,K,M,f,g)
     t2m = time.time()
     t_matrices.append(t2m-t1m)
 
@@ -73,7 +73,7 @@ for h in _h:
 
     t1e = time.time()
     writeStatus('EIG.')
-    solver = femSolver.Solver(engine)
+    solver = Solver(engine)
     ev,v = solver.eig(K,M,30,sigma=0,which='LM')
     t2e = time.time()
     t_eigs.append(t2e-t1e)

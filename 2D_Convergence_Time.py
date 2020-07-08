@@ -5,10 +5,11 @@ from mpl_toolkits.mplot3d import Axes3D
 import time
 
 import FEM.FEM_2D as fem2d
+from FEM.Boundary import Boundary
 from scipy.sparse.csgraph import reverse_cuthill_mckee
 
 L = 2*np.pi
-_h = [0.1,0.08,0.04,0.02]
+_h = [0.1,0.08,0.04,0.03]
 orders = [1,2]
 formule = 2
 plot=0
@@ -22,7 +23,7 @@ t_M = []
 t_Dirichlet = []
 t_Solver = []
 
-def g(x,y):
+def g(x,y,z):
     return x
 
 def f(x,y): 
@@ -76,7 +77,7 @@ for order in orders:
         t_M.append(t2_M-t1_M)
 
         t1_Dirichlet = time.time()
-        K,M,F,G_Boundary,ddl_interior_idx,ddl_boundary_idx = engine.Boundary.Apply_Dirichlet(1, K, M, f, g)
+        K,M,F,G_Boundary,ddl_interior_idx,ddl_boundary_idx = Boundary.Apply_Dirichlet(engine, 1, K, M, f, g)
         t2_Dirichlet = time.time()
         t_Dirichlet.append(t2_Dirichlet-t1_Dirichlet)
         A = K + M

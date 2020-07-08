@@ -2,7 +2,6 @@ import numpy as np
 import numpy.linalg as la
 import scipy.sparse as sparse
 
-from .Boundary import Boundary
 from .Mesh import Mesh
 
 class Engine:
@@ -10,7 +9,6 @@ class Engine:
         self.order = order
         self.formule = formule
         self.mesh = mesh
-        self.Boundary = Boundary(self)
         self.ddl,self.numDdl,self.u,self.dxu,self.dyu,self.dzu,self.omega = self.initializeMatrices('Lagrange')
         
     def IntegrationPointsHat(self, formule: int):
@@ -25,7 +23,7 @@ class Engine:
             xhat = [a,a,a,b]
             yhat = [a,a,b,a]
             zhat = [a,b,a,a]
-            omega = [1/4,1/4,1/4,1/4]
+            omega = [1/24,1/24,1/24,1/24]
         elif (formule==2):
             xhat = [1/4,1/2,1/6,1/6,1/6]
             yhat = [1/4,1/6,1/6,1/6,1/2]
@@ -82,7 +80,7 @@ class Engine:
 
             for iloc in range(0,len(xhat)): #Points of Integration
                 iglob = np.arange(iloc,N_int,len(xhat),dtype=np.int64)
-                omega[iglob] = omegaloc[iloc] * detJ / 6 #3!
+                omega[iglob] = omegaloc[iloc] * detJ
                 for jloc in range(0,len(phi[0])): #Base functions
                     _idx = jloc*N_int + iloc*len(iglob) + np.arange(0,len(iglob)) #Global stacked index for the sparse matrix
                     jglob = numDdl[:,jloc]
@@ -120,12 +118,8 @@ class Engine:
                 dxphi.append([-1.,1.,0.,0])
                 dyphi.append([-1.,0.,1.,0])
                 dzphi.append([-1.,0.,0.,1])
-        elif (order==2): #TODO: Order 2 functions
-            for i in range(0,len(x)):
-                phi.append([1])
-                dxphi.append([1])
-                dyphi.append([1])
-                dzphi.append([1])
+        else: 
+            raise Exception('Lagrande functions of order ' + str(order) + ' not implemented.')
         return np.array(phi), np.array(dxphi), np.array(dyphi), np.array(dzphi)
     
     def M_Matrix(self,c=1):
@@ -159,5 +153,25 @@ class Engine:
         ddl,u,omega  = self.ddl,self.u,self.omega
         fh = u.multiply(f(ddl[:,0],ddl[:,1],ddl[:,2])).transpose()
         return fh.dot(omega)
+
+    def getValueByPosition(self, ddlValues, position):
+        """ Given the values of the degrees of freedom, it interpolates the lagrange functions to give the estimated value. Only works for Lagrange P1 elements. """
+        etags = []
+        coords_u = []
+        coords_v = []
+        coords_w = []
+        for pos in position:
+            x = pos[0]
+            y = pos[1]
+            z = pos[2]
+            etag,etype,nodeTags,u,v,w = self.mesh.model.mesh.getElementByCoordinates(x,y,z,3)
+            etags.append(etag)
+            coords_u.append(u)
+            coords_v.append(v)
+            coords_w.append(w)
+        tetraIndex = [np.where(self.mesh.tetraTags==etag)[0][0] for etag in etags]
+        nodeIndex = self.mesh.tetrahedrons[tetraIndex]
+        lFunction = self.LagrangeFunctions(coords_u,coords_v,coords_w,1)[0][0]
+        return np.dot(lFunction, np.transpose(ddlValues[:,nodeIndex],(0,2,1)))
 
     

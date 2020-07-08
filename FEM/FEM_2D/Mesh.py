@@ -5,10 +5,20 @@ import matplotlib.pyplot as plt
 class Mesh:
     @staticmethod
     def MeshSquare(name,Lx,Ly,h,order=1):
-        m = Mesh('Mesh2D')
+        """ Create and return an instance of a square mesh. """
+        m = Mesh(name)
         elements = m.createSurface([[0,0,0],[Lx,0,0],[Lx,Ly,0],[0,Ly,0]],h=h)
         m.fac.addPlaneSurface([elements[-1]])
         m.generate(order=order)
+        return m
+
+    @staticmethod
+    def MeshByTriangles(name,nodeTags,triangles,vertices):
+        """ Create and return a mesh instance given the triangles and its vertices. The input must be ordered and numerated correctly. """
+        m = Mesh(name)
+        m.nodeTags = nodeTags
+        m.vertices = vertices
+        m.triangles = triangles
         return m
 
     def __init__(self, name):
@@ -21,11 +31,32 @@ class Mesh:
         self.vertices = np.array([])
         self.triangles = np.array([])
 
+    def calcAreas3D(self):
+        """ Calculate the area of each triangle(element) for triangles in 3 dimensions. Used for assembling the mass matrix for robin boundary conditions at surfaces. """
+        K = self.vertices[self.triangles]
+        self.area_triangle_ref = .5
+
+        #Structure of K:
+        #x = Tk(xhat) = K(xhat); for Xhat 1(0,0,1), 2(1,0,0), 3(0,1,0):
+
+        #Only need the edges to get the transformation
+        K = K[:,0:3,:]
+        K = np.moveaxis(K,2,1)
+        
+        #Area 
+        X1 = K[:,:,1] - K[:,:,0]
+        X2 = K[:,:,2] - K[:,:,0]
+        x1=X1[:,0];y1=X1[:,1];z1=X1[:,2]
+        x2=X2[:,0];y2=X2[:,1];z2=X2[:,2]
+        A_paralelo = np.sqrt((y1*z2-y2*z1)**2 +  (x1*z2-x2*z1)**2 + (x1*y2 - x2*y1)**2) #TODO: Costly?
+        self.areas=A_paralelo/2
+
     def calcJacobians(self):
         """Pre-calculate the jacobian of all triangles."""
         K = self.vertices[self.triangles]
+        self.area_triangle_ref = .5
 
-        #Formulation for the inversion of 2x2 matrices
+        #Transformation Matrix
         xa = K[:,0,0];ya = K[:,0,1]
         xb = K[:,1,0];yb = K[:,1,1]
         xc = K[:,2,0];yc = K[:,2,1]
@@ -33,6 +64,7 @@ class Mesh:
         b = (xc-xa)
         c = (yb-ya)
         d = (yc-ya)
+        #Inversion of 2x2 matrices
         self.determinants = a*d - b*c
         self.inverses = np.stack(1/self.determinants * [d,-b,-c,a],axis=1).reshape(-1,2,2)
         
@@ -54,6 +86,7 @@ class Mesh:
         return (p,l,cl)
 
     def createCircle(self, x, y, z, radius, h=0.03, addInterior = True):
+        """ Add a circle to the mesh. If addInterior = True, the interior of the circle will be meshed. """
         p1 = self.fac.addPoint(x,y+radius,z,h)
         p2 = self.fac.addPoint(x,y,z,h)
         p3 = self.fac.addPoint(x,y-radius,z,h)
