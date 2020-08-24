@@ -3,11 +3,10 @@ from FEM import Boundary,Solver
 import numpy as np
 import numpy.linalg as la
 import gmsh
-from scipy.sparse.csgraph import reverse_cuthill_mckee
+import scipy.sparse as sparse
 import matplotlib.pyplot as plt
 import time
 import sys
-
 
 errors = []
 t_matrices = []
@@ -20,24 +19,18 @@ plotErrors=1
 Lx=1
 Ly=1.1
 Lz=1.2
-_h =[0.07,0.06,0.05,0.04]
+_h = [0.09,0.08,0.07,0.06]
 
-#Exact eigenvalues of a cube
+#Exact eigenvalues for a cube
 _ev_cube=[]
 for i in range(1,4):
     for j in range(1,4):
         for k in range(1,4):
             _ev_cube.append(np.sqrt( (i*np.pi/Lx)**2 + (j*np.pi/Ly)**2 + (k*np.pi/Lz)**2 ))
-_ev_cube = np.sort(_ev_cube)[0:10]
+_ev_cube = np.sort(_ev_cube)[0:9]
 
 if printEigs:
     print(_ev_cube)
-
-def f(x,y,z):
-    return 0*x
-
-def g(x,y,z):
-    return 0*x
 
 def writeStatus(status):
     sys.stdout.write('Status: ' + status + '                  \r')
@@ -65,7 +58,11 @@ for h in _h:
     writeStatus('Calculating M Matrix.')
     M = engine.M_Matrix()
     writeStatus('Applying Dirichlet.')
-    K,M,F,G_Boundary,ddl_interior_idx,ddl_boundary_idx = Boundary.Apply_Dirichlet(engine, 1,K,M,f,g)
+    C = sparse.csc_matrix(M.shape)
+
+    f = lambda time_index: 0*engine.ddl[:,0]
+    g = lambda time_index: 0*engine.ddl[:,0]
+    M,C,K,F,G_Boundary,ddl_interior_idx,ddl_boundary_idx = Boundary.Apply_Dirichlet(engine,1,M,C,K,f,g)
     t2m = time.time()
     t_matrices.append(t2m-t1m)
 
@@ -80,17 +77,16 @@ for h in _h:
 
     print(str(len(engine.ddl)) + ' - Matrices(K,M B.C.) - ' + str(t2m-t1m) + ' - EIGS ' + str(t2e-t1e))
 
-    w, w_indexes = np.unique(np.floor(np.real(np.sqrt(ev*1e4))),return_index=True)
-    w = np.sqrt(ev[w_indexes])
+    w, w_indexes = np.unique(np.floor(np.real(ev[ev>0]*1e5)), return_index=True)
+    w = w[0:10]/1e5
+    w = np.sqrt(w)
+    err = np.abs(w[0]-_ev_cube[0])/la.norm(w[0])
+    errors.append(err)
 
     v = v.T[w_indexes]
-
-    l = np.min([len(w),len(_ev_cube)])
-    errors.append(la.norm(np.abs(w[0:l]-_ev_cube[0:l]))/la.norm(w[0:l]))
-
     if printEigs:
         print('----- EIGS ' + str(len(engine.ddl)) + ' -----')
-        print(w[0:l])
+        print(w[0:10])
         print('---------------------------')
 
     if showModes and len(_h) == 1:
@@ -98,7 +94,7 @@ for h in _h:
         v_all = np.zeros((len(w),len(engine.ddl)))
         for i in range(0,len(w)):
             v_all[i,ddl_interior_idx] = np.real(v[i])/np.max(np.abs(v[i]))
-            v_all[i,ddl_boundary_idx] = G_Boundary
+            v_all[i,ddl_boundary_idx] = G_Boundary(0)
 
         for i in range(0,len(w)):
             viewTag = m.pos.add(str(i))
@@ -117,12 +113,12 @@ if plotErrors:
     
     plt.figure()
     plt.loglog(_h,errors)
-    plt.loglog(_h,8 * np.array(_h)**2,'k-.')
-    plt.legend(['|Error EV|','Ref 2'])
+    plt.loglog(_h,7 * np.array(_h)**2,'k-.')
+    plt.legend(['|$\epsilon$ eigenvalues|','$h^{-2}$'])
     plt.xlabel('h')
     plt.ylabel('|Error|')
-    # ax = plt.gca()
-    # ax.invert_xaxis()
+    ax = plt.gca()
+    ax.invert_xaxis()
 
     plt.figure()
     plt.loglog(nddls,t_matrices)
@@ -132,9 +128,6 @@ if plotErrors:
     plt.legend(['K & M', 'EIGS', 'Ref 1', 'Ref 2'])
     plt.xlabel('#ddl')
     plt.ylabel('Time')
-    # ax = plt.gca()
-    # ax.invert_xaxis()
-
     plt.show()
 
 if showModes and len(_h) == 1:

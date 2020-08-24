@@ -4,6 +4,7 @@ import scipy.sparse as sparse
 
 class Engine:
     def __init__(self,mesh,order,formule,calcForMass3D=False):
+        """ Initialize the engine and assembles the support matrices """
         self.order = order
         self.formule = formule
         self.mesh = mesh
@@ -64,7 +65,7 @@ class Engine:
                     numDdl.append([len(ddl)-1])
                 numDdl = np.array(numDdl)
                 ddl = np.array(ddl)
-            elif (order==1 or order==2): #GMSH generate the nodes
+            elif (order==1 or order==2): #TODO: GMSH generate the nodes
                 ddl = mesh.vertices
                 numDdl = np.array(mesh.triangles,dtype=np.int32)
 
@@ -76,17 +77,12 @@ class Engine:
                 dxhat_dy = J_inv[:,0,1]
                 dyhat_dx = J_inv[:,1,0]
                 dyhat_dy = J_inv[:,1,1]
-            else:
-                mesh.calcAreas3D()
-                areas_ratio = mesh.areas / mesh.area_triangle_ref
+            else: #If the coordinates are in 3D uses another formula
+                areas_ratio = mesh.calcAreasRatio3D()
                 
-
             N_ddl = len(ddl)
             N_int = len(mesh.triangles)*len(xhat)
             omega = np.zeros(N_int)
-            # u = sparse.lil_matrix((N_int,N_ddl))
-            # dxu = sparse.lil_matrix((N_int,N_ddl))
-            # dyu = sparse.lil_matrix((N_int,N_ddl))
 
             #The sparse matrices will have for each line a integration point and each
             #column a ddl. The number of integration points is the number of elements
@@ -109,13 +105,12 @@ class Engine:
                     _i[_idx] = iglob
                     _j[_idx] = jglob
                     _v_u[_idx] = np.ones(len(iglob))*phi[iloc,jloc]
-                    if not self.calcForMass3D:
+
+                    if not self.calcForMass3D: #The derivatives are not needed for the mass matrix
                         _v_dxu[_idx] = (dxphi[iloc,jloc]*dxhat_dx + dyphi[iloc,jloc]*dyhat_dx)
                         _v_dyu[_idx] = (dxphi[iloc,jloc]*dxhat_dy + dyphi[iloc,jloc]*dyhat_dy)
-                    # u[iglob,jglob] = phi[iloc,jloc]
-                    # dxu[iglob,jglob] = (dxphi[iloc,jloc]*dxhat_dx + dyphi[iloc,jloc]*dyhat_dx) 
-                    # dyu[iglob,jglob] = (dxphi[iloc,jloc]*dxhat_dy + dyphi[iloc,jloc]*dyhat_dy)
                     
+            #Generate the matrices from the row/col indexes and values
             u = sparse.coo_matrix((_v_u, (_i, _j)),(N_int,N_ddl))
             dxu = sparse.coo_matrix((_v_dxu, (_i, _j)),(N_int,N_ddl))
             dyu = sparse.coo_matrix((_v_dyu, (_i, _j)),(N_int,N_ddl))
@@ -160,10 +155,12 @@ class Engine:
                                 -4*x[i],            
                                 4*x[i],                
                                 -4*(x[i] + 2*y[i] - 1)])
+        else: 
+            raise Exception('Lagrande functions of order ' + str(order) + ' not implemented.')
         return np.array(phi), np.array(dxphi), np.array(dyphi)
     
-    def M_Matrix(self,c=1):
-        """ Generate de mass matrix """
+    def M_Matrix(self):
+        """ Generate the mass matrix """
         u,omega  = self.u,self.omega
         M = u.transpose().dot(u.transpose().multiply(omega).transpose())
         M = M.tocsc()
@@ -171,10 +168,10 @@ class Engine:
         #Garantee int64 to UMFPACK
         M.indices = M.indices.astype(np.int64)
         M.indptr = M.indptr.astype(np.int64)
-        return M/(c**2)
+        return M
 
     def K_Matrix(self):
-        """ Generate de stiffness matrix """
+        """ Generate the stiffness matrix """
         dxu,dyu,omega  = self.dxu,self.dyu,self.omega
         G1 = dxu.transpose().dot(dxu.transpose().multiply(omega).transpose())
         G2 = dyu.transpose().dot(dyu.transpose().multiply(omega).transpose())
@@ -187,7 +184,7 @@ class Engine:
         return K
 
     def F_Matrix(self, f):
-        """ Generate de forcing matrix """
-        ddl,u,omega  = self.ddl,self.u,self.omega
-        fh = u.multiply(f(ddl[:,0],ddl[:,1])).transpose()
-        return fh.dot(omega)
+        """ Generate the forcing matrix. f is function of time index and return a vector with #DDLs values."""
+        u,omega  = self.u,self.omega
+        _ret = lambda time_index: u.multiply(f(time_index)).transpose().dot(omega)
+        return _ret

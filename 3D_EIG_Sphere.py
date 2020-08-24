@@ -3,9 +3,8 @@ from FEM import Solver,Boundary
 import numpy as np
 import numpy.linalg as la
 import gmsh
+import scipy.sparse as sparse
 import scipy.sparse.linalg as sla
-from scipy.sparse.csgraph import reverse_cuthill_mckee
-from scipy.io import mmwrite,mmread
 import matplotlib.pyplot as plt
 import time
 
@@ -19,20 +18,14 @@ class MyInv(sla.LinearOperator):
     def _matvec(self, x):
         return self.solve(x)
 
-_ev_sphere = [3.14159,4.49341,5.76346,6.28318,6.98793,7.72525,8.18256,9.09501,9.35581]
+_ev_sphere = np.array([3.14159,4.49341,5.76346,6.28318,6.98793,7.72525,8.18256,9.09501,9.35581])
 errors = []
 t_matrices = []
 t_eigs = []
 nddls = []
-_h =[0.09,0.08,0.07,0.06]#
-showModes=0
+_h = [0.09,0.08,0.07,0.06]
+showModes=1
 plotErrors=1
-
-def f(x,y,z):
-    return 0*x
-
-def g(x,y,z):
-    return 0*x
 
 for h in _h:
     m = fem.Mesh('Mesh3D')
@@ -51,8 +44,12 @@ for h in _h:
     engine = fem.Engine(m,1,1)
     K = engine.K_Matrix()
     M = engine.M_Matrix()
+    C = sparse.csc_matrix(M.shape)
     t2m = time.time()
-    K,M,F,G_Boundary,ddl_interior_idx,ddl_boundary_idx = Boundary.Apply_Dirichlet(engine,1,K,M,f,g)
+    
+    f = lambda time_index: 0*engine.ddl[:,0]
+    g = lambda time_index: 0*engine.ddl[:,0]
+    M,C,K,F,G_Boundary,ddl_interior_idx,ddl_boundary_idx = Boundary.Apply_Dirichlet(engine,1,M,C,K,f,g)
     t_matrices.append(t2m-t1m)
 
     nddls.append(K.shape[0])
@@ -62,23 +59,21 @@ for h in _h:
     ev,v = solver.eig(K,M,30,sigma=0,which='LM')
     t2e = time.time()
     t_eigs.append(t2e-t1e)
-
     print(str(len(engine.ddl)) + ' - Matrices(K,M B.C.) - ' + str(t2m-t1m) + ' - EIGS ' + str(t2e-t1e))
 
-    w, w_indexes = np.unique(np.floor(np.real(np.sqrt(ev*1e3))),return_index=True)
-    w = np.sqrt(ev[w_indexes])
+    w, w_indexes = np.unique(np.floor(np.real(ev[ev>0]*1e5)), return_index=True)
+    w = w[0:10]/1e5
+    w = np.sqrt(w)
+    err = np.abs(w[0]-_ev_sphere[0])/la.norm(w[0])
+    errors.append(err)
 
     v = v.T[w_indexes]
-
-    l = np.min([len(w),len(_ev_sphere)])
-    errors.append(la.norm(np.abs(w[0:l]-_ev_sphere[0:l]))/la.norm(w[0:l]))
-
     if showModes and len(_h) == 1:
         option = gmsh.option
         v_all = np.zeros((len(w),len(engine.ddl)))
         for i in range(0,len(w)):
             v_all[i,ddl_interior_idx] = np.real(v[i])#/np.max(np.abs(v[i]))
-            v_all[i,ddl_boundary_idx] = G_Boundary
+            v_all[i,ddl_boundary_idx] = G_Boundary(0)
 
         for i in range(0,len(w)):
             viewTag = m.pos.add(str(i))
@@ -97,7 +92,7 @@ if plotErrors:
     plt.figure()
     plt.loglog(_h,errors)
     plt.loglog(_h,3 * np.array(_h)**2,'k-.')
-    plt.legend(['|Error EV|','Ref 2'])
+    plt.legend(['|$\epsilon$ eigenvalues|','$h^{-2}$'])
     plt.xlabel('h')
     plt.ylabel('|Error|')
 

@@ -1,17 +1,17 @@
 import numpy as np
 import scipy.sparse.linalg as sla
 import matplotlib.pyplot as plt
+import scipy.sparse as sparse
 from mpl_toolkits.mplot3d import Axes3D
 import time
 
 import FEM.FEM_2D as fem2d
 from FEM.Boundary import Boundary
-from scipy.sparse.csgraph import reverse_cuthill_mckee
 
-L = 2*np.pi
 _h = [0.1,0.08,0.04,0.03]
 orders = [1,2]
 formule = 2
+
 plot=0
 plot_errors=1
 plot_time=0
@@ -22,12 +22,7 @@ t_K = []
 t_M = []
 t_Dirichlet = []
 t_Solver = []
-
-def g(x,y,z):
-    return x
-
-def f(x,y): 
-    return x + 3*np.sin(x)*np.sin(y) # exact (1/3)cos(x)cos(y)
+L = 2*np.pi
 
 def f_exact(x,y):
     return x + np.sin(x)*np.sin(y)
@@ -50,12 +45,6 @@ for order in orders:
         sS = m.fac.addPlaneSurface([clS])
         m.model.addPhysicalGroup(1,lS,1)
 
-        #(pS,lS,clS) = m.createSurface([[0,0,0],[L,0,0],[L,L,0],[0,L,0]],h= h)
-        #(pC,lC,clC,sC) = m.createCircle(L/2, L/2, 0, L/6, h = 0.3*h, addInterior=True) 
-        #sS = m.fac.addPlaneSurface([clS,clC])
-        #m.fac.synchronize()
-        #m.model.addPhysicalGroup(1,lS,1)
-
         m.generate(order)
 
         t1 = time.time()
@@ -63,6 +52,7 @@ for order in orders:
         qtd_vtx.append(len(m.vertices))
         t1_init = time.time()
         engine = fem2d.Engine(m,order,formule)
+        ddls=engine.ddl
         t2_init = time.time()
         t_init.append(t2_init-t1_init)
         
@@ -75,27 +65,28 @@ for order in orders:
         M = engine.M_Matrix()
         t2_M = time.time()
         t_M.append(t2_M-t1_M)
+        C = sparse.csc_matrix(M.shape)
 
         t1_Dirichlet = time.time()
-        K,M,F,G_Boundary,ddl_interior_idx,ddl_boundary_idx = Boundary.Apply_Dirichlet(engine, 1, K, M, f, g)
+
+        f = lambda time_index: ddls[:,0] + 3*np.sin(ddls[:,0])*np.sin(ddls[:,1]) # exact (1/3)cos(x)cos(y)
+        g = lambda time_index: ddls[:,0]
+
+        M,C,K,F,G_Boundary,ddl_interior_idx,ddl_boundary_idx = Boundary.Apply_Dirichlet(engine, 1, M, C, K, f, g)
         t2_Dirichlet = time.time()
         t_Dirichlet.append(t2_Dirichlet-t1_Dirichlet)
         A = K + M
 
         t1_Solver = time.time()
-        idx_rcm = reverse_cuthill_mckee(A)
-        A = A[idx_rcm,:]
-        A = A[:,idx_rcm]
-        F = F[idx_rcm]
 
-        S_ = sla.spsolve(A,F)
+        S_ = sla.spsolve(A,F(0))
         t2_Solver = time.time()
         t_Solver.append(t2_Solver-t1_Solver)
 
         ddl = engine.ddl
         S = np.zeros(len(ddl))
-        S[ddl_boundary_idx] = G_Boundary
-        S[ddl_interior_idx] = S_[np.argsort(idx_rcm)]
+        S[ddl_boundary_idx] = G_Boundary(0)
+        S[ddl_interior_idx] = S_
         t2 = time.time()
 
         S_exact = np.array([f_exact(ddl[i,0],ddl[i,1]) for i in range(0,len(ddl))])
@@ -123,14 +114,14 @@ for order in orders:
 
 if plot_errors:
     plt.figure()
-    plt.loglog(_h,_L2_o1)
-    plt.loglog(_h,_H1_o1)
-    plt.loglog(_h,_L2_o2)
-    plt.loglog(_h,_H1_o2)
-    plt.loglog(_h,2*(10**-1) * np.array(_h),'k-.')
-    plt.loglog(_h,5*(10**-2) * np.array(_h)**2,'k--')
-    plt.loglog(_h,5*(10**-3) * np.array(_h)**4,'k-+')
-    plt.legend(['L2(1)','H1(1)','L2(2)','H1(2)','Ref 1','Ref 2','Ref 3'])
+    plt.loglog(_h,_L2_o1,'-')
+    plt.loglog(_h,_H1_o1,'-')
+    plt.loglog(_h,_L2_o2,'-+')
+    plt.loglog(_h,_H1_o2,'-+')
+    plt.loglog(_h,8*(10**-1) * np.array(_h),'k:')
+    plt.loglog(_h,9*(10**-2) * np.array(_h)**2,'k-.')
+    plt.loglog(_h,9*(10**-3) * np.array(_h)**4,color='grey',linestyle=':')
+    plt.legend(['L2(1)','H1(1)','L2(2)','H1(2)','$h^{-1}$','$h^{-2}$','$h^{-3}$'],loc='lower left')
     plt.xlabel('h')
     plt.ylabel('|Error|')
     ax = plt.gca()

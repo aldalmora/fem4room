@@ -60,10 +60,6 @@ class Engine:
             N_ddl = len(ddl)
             N_int = len(mesh.tetrahedrons)*len(xhat)
             omega = np.zeros(N_int)
-            # u = sparse.lil_matrix((N_int,N_ddl))
-            # dxu = sparse.lil_matrix((N_int,N_ddl))
-            # dyu = sparse.lil_matrix((N_int,N_ddl))
-            # dzu = sparse.lil_matrix((N_int,N_ddl))
 
             #The sparse matrices will have for each line a integration point and each
             #column a ddl. The number of integration points is the number of elements
@@ -90,15 +86,13 @@ class Engine:
                     _v_dxu[_idx] = (dxphi[iloc,jloc]*dxhat_dx + dyphi[iloc,jloc]*dyhat_dx + dzphi[iloc,jloc]*dzhat_dx)
                     _v_dyu[_idx] = (dxphi[iloc,jloc]*dxhat_dy + dyphi[iloc,jloc]*dyhat_dy + dzphi[iloc,jloc]*dzhat_dy)
                     _v_dzu[_idx] = (dxphi[iloc,jloc]*dxhat_dz + dyphi[iloc,jloc]*dyhat_dz + dzphi[iloc,jloc]*dzhat_dz)
-                    # u[iglob,jglob] = phi[iloc,jloc]
-                    # dxu[iglob,jglob] = (dxphi[iloc,jloc]*dxhat_dx + dyphi[iloc,jloc]*dyhat_dx + dzphi[iloc,jloc]*dzhat_dx)
-                    # dyu[iglob,jglob] = (dxphi[iloc,jloc]*dxhat_dy + dyphi[iloc,jloc]*dyhat_dy + dzphi[iloc,jloc]*dzhat_dy)
-                    # dzu[iglob,jglob] = (dxphi[iloc,jloc]*dxhat_dz + dyphi[iloc,jloc]*dyhat_dz + dzphi[iloc,jloc]*dzhat_dz)
             
+            
+            #Generate the matrices from the row/col indexes and values
             u = sparse.coo_matrix((_v_u, (_i, _j)),(N_int,N_ddl))
             dxu = sparse.coo_matrix((_v_dxu, (_i, _j)),(N_int,N_ddl))
             dyu = sparse.coo_matrix((_v_dyu, (_i, _j)),(N_int,N_ddl))
-            dzu = sparse.coo_matrix((_v_dzu, (_i, _j)),(N_int,N_ddl)) 
+            dzu = sparse.coo_matrix((_v_dzu, (_i, _j)),(N_int,N_ddl))
             u = u.tocsc() 
             dxu = dxu.tocsc()
             dyu = dyu.tocsc()
@@ -107,7 +101,7 @@ class Engine:
         return np.array(ddl),np.array(numDdl),u,dxu,dyu,dzu,omega
 
     def LagrangeFunctions(self, x, y, z, order: int):
-        """ Get the values and of the base functions and its derivatives at the tetrahedra of reference. """
+        """ Get the values and of the base functions and its derivatives at the tetrahedra of reference. """ #TODO: Return what
         phi = []
         dxphi = []
         dyphi = []
@@ -122,8 +116,8 @@ class Engine:
             raise Exception('Lagrande functions of order ' + str(order) + ' not implemented.')
         return np.array(phi), np.array(dxphi), np.array(dyphi), np.array(dzphi)
     
-    def M_Matrix(self,c=1):
-        """ Generate de mass matrix """
+    def M_Matrix(self):
+        """ Generate the mass matrix """
         u,omega  = self.u,self.omega
         M = u.transpose().dot(u.transpose().multiply(omega).transpose())
         M = M.tocsc()
@@ -131,10 +125,10 @@ class Engine:
         #Garantee int64 to UMFPACK
         M.indices = M.indices.astype(np.int64)
         M.indptr = M.indptr.astype(np.int64)
-        return M/(c**2)
+        return M
 
     def K_Matrix(self):
-        """ Generate de stiffness matrix """
+        """ Generate the stiffness matrix """
         dxu,dyu,dzu,omega  = self.dxu,self.dyu,self.dzu,self.omega
         G1 = dxu.transpose().dot(dxu.transpose().multiply(omega).transpose())
         G2 = dyu.transpose().dot(dyu.transpose().multiply(omega).transpose())
@@ -148,11 +142,10 @@ class Engine:
         return K
 
     def F_Matrix(self, f):
-        """ Generate de forcing matrix """
-
-        ddl,u,omega  = self.ddl,self.u,self.omega
-        fh = u.multiply(f(ddl[:,0],ddl[:,1],ddl[:,2])).transpose()
-        return fh.dot(omega)
+        """ Generate the forcing matrix. f is function of time index and return a vector with #DDLs values."""
+        u,omega  = self.u,self.omega
+        _ret = lambda time_index: u.multiply(f(time_index)).transpose().dot(omega)
+        return _ret
 
     def getValueByPosition(self, ddlValues, position):
         """ Given the values of the degrees of freedom, it interpolates the lagrange functions to give the estimated value. Only works for Lagrange P1 elements. """

@@ -29,6 +29,6 @@ class Solver():
         idx_rcm = reverse_cuthill_mckee(A)
         A = A[idx_rcm,:]
         A = A[:,idx_rcm]
-        F = F[idx_rcm]
+        F = F(0)[idx_rcm]
         
         return sla.spsolve(A,F)

@@ -1,12 +1,17 @@
+import sys
 import numpy as np
+import scipy.sparse as sparse
 import scipy.signal as signal
 import scipy.fft as fft
 import pickle as pk
 import gmsh
 import numpy.linalg as la
-from . import TimeEngine
+from . import TimeEngine,Boundary
+from . import FEM_3D as fem3d
+from . import FEM_2D as fem2d
 
 class Sources():
+
     @staticmethod
     def monopole_by_band(t_,band,sigma=None):
         """ Return a forcing function representing a monopole source. The signal is a gaussian with the given cutoff frequencies (3dB). """
@@ -14,15 +19,13 @@ class Sources():
         omega = 2*np.pi*freq
 
         if sigma==None:
-            sigma=1/(omega/2) #1/4 of the band
+            fc = (np.max(band)-np.min(band))
+            sigma=1/(2*np.pi*fc/8) #TODO: why, what is the needed bandwidth?
 
         t=t_-5*sigma #Shifts the gaussian so it can start at zero.
 
         _signal = np.sin(omega*t) * np.exp(-t**2/(2*sigma**2))
-
-        _signal = _signal * 1/(sigma*np.sqrt(2*np.pi))
-        #_signal = _signal/np.max(np.abs(_signal))
-
+        _signal = _signal/np.max(np.abs(_signal))
         return 4 * np.pi * _signal
 
 class Visualization():
@@ -71,10 +74,14 @@ class SaveLoad():
 
 class Other():
     @staticmethod
-    def nearest_ddl(ddls,x):
+    def nearest_ddl(ddls,x): #TODO: Not here
         """Return the index of the nearest 3D degree of freedom"""
         idx = np.argmin(la.norm(ddls - x,axis=1))
         return idx
+
+    @staticmethod
+    def printInline(text):
+        sys.stdout.write(text + '                                            \r')
 
 class RoomResponse():
     """ Class that handles the calculation of the impulse response. """
@@ -92,7 +99,7 @@ class RoomResponse():
         self.nddls = M.shape[0]
         
         self.tspan = np.arange(0,self.tf,self.dt)
-        self.tengine = TimeEngine.Newmark(self.M,self.C,self.K,self.dt,alpha=.25,delta=.5)
+        self.tengine = TimeEngine.Newmark_iterative(self.M,self.C,self.K,self.dt,alpha=.25,delta=.5)
 
         self.time_monopole = Sources.monopole_by_band(self.tspan,self.f_band)
 
@@ -102,20 +109,17 @@ class RoomResponse():
 
     def run(self):
         """ Calculate the room response and return: Discretized frequencies, input spectrum, output spectrum, frequency response, output time response. """
-        u0 = np.zeros(self.nddls)
-        du0 = np.zeros(self.nddls)
-        ddu0 = np.zeros(self.nddls)
-        s,s_main = self.tengine.solve(self.tspan,self.forcing_function,u0,du0,ddu0,self.idx_xR,[],1)
+        s,s_main = self.tengine.solve(self.tspan,self.forcing_function,self.idx_xR,[],1)
 
         all_frequencies=fft.rfftfreq(len(self.tspan),self.dt)
         valid_band_idx = np.arange((np.abs(all_frequencies-self.f_band[0])).argmin(),(np.abs(all_frequencies-self.f_band[1])).argmin()+1)
         frequencies = all_frequencies[valid_band_idx]
-        forcing = [self.forcing_function(i)[self.idx_xS] for i in range(0,len(self.tspan))]
-        f_forcing = fft.rfft(forcing)[valid_band_idx]
+        pressure1m = np.array([self.forcing_function(i)[self.idx_xS] for i in range(0,len(self.tspan))])/(4*np.pi) # Forcing divided by 4pi so the reference pressure be at distance 1
+        f_pressure1m = fft.rfft(pressure1m)[valid_band_idx]
         f_result = []
         f_ratio = []
         for idx in range(0,len(self.idx_xR)):
             f_result.append(fft.rfft(s_main[:,idx])[valid_band_idx])
-            f_ratio.append(fft.rfft(s_main[:,idx])[valid_band_idx]/f_forcing)
+            f_ratio.append(fft.rfft(s_main[:,idx])[valid_band_idx]/f_pressure1m) #
 
-        return frequencies,f_forcing,f_result,f_ratio,s_main
+        return frequencies,f_pressure1m,f_result,f_ratio,s_main

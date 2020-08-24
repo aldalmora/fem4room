@@ -5,6 +5,7 @@ data/*
 tests/*
 MESH/*
 *.pkl
+SAVES/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
