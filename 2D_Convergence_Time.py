@@ -5,8 +5,8 @@ import scipy.sparse as sparse
 from mpl_toolkits.mplot3d import Axes3D
 import time
 
-import FEM.FEM_2D as fem2d
-from FEM.Boundary import Boundary
+import fem4room.FEM_2D as fem2d
+from fem4room.Boundary import Boundary
 
 _h = [0.1,0.08,0.04,0.03]
 orders = [1,2]

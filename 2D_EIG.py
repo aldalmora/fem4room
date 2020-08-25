@@ -7,8 +7,8 @@ import matplotlib.pyplot as plt
 import numpy.linalg as la
 import time
 
-import FEM.FEM_2D as fem
-from FEM import Boundary
+import fem4room.FEM_2D as fem
+from fem4room import Boundary
 
 def f(x,y):
     return 0*x

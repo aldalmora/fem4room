@@ -1,5 +1,5 @@
-import FEM.FEM_3D as fem
-from FEM import Boundary,Solver
+import fem4room.FEM_3D as fem
+from fem4room import Boundary,Solver
 import numpy as np
 import numpy.linalg as la
 import gmsh
