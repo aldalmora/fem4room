@@ -49,11 +49,11 @@ class Simulation():
         '630'  : [ 561.231 , 707.107 ],
         '800'  : [ 707.107 , 890.899 ]} 
 
-    def defineFrequencyBands(self,bands):
+    def setFrequencyBands(self,bands):
         """ Change the dictionary of bands and its cut-off frequencies. """
         self.bands_freq = bands
 
-    def defineParameters(self,c=340.,elementsPerWavelength=6,cfl=.8):
+    def setParameters(self,c=340.,elementsPerWavelength=6,cfl=.8):
         """ Change the default parameters for sound speed, elements per wavelength and the CFL condition number. """
         self.c = c
         self.elementsPerWavelength = elementsPerWavelength
@@ -68,7 +68,7 @@ class Simulation():
         self.refine_BC = True
         self.BC_max_h = max_h
 
-    def defineAbsorption(self, physicalGroup, absorptionCoefsByBand):
+    def setAbsorption(self, physicalGroup, absorptionCoefsByBand):
         """ For a given surface name, set the absorption coefficients for each band. """
         self.impedancesByBand[physicalGroup] = {}
         for band in absorptionCoefsByBand:
@@ -76,7 +76,7 @@ class Simulation():
             impedancesByBand = (1+ref_coef)/(1-ref_coef)
             self.impedancesByBand[physicalGroup][band] = impedancesByBand
 
-    def defineImpedance(self, physicalGroup, impedancesByBand):
+    def setImpedance(self, physicalGroup, impedancesByBand):
         """ For a given surface name, set the impedance for each band. """
         self.impedancesByBand[physicalGroup] = impedancesByBand
 
@@ -84,15 +84,15 @@ class Simulation():
         """ Read a geometry described in the DXF format. """
         m = fem3d.Mesh(file)
         m.readDXF(file)
-        self.defineMesh(m)
+        self.setMesh(m)
 
     def readGeometryGEO(self,file):
         """ Read a geometry described in GEO format. """
         m = fem3d.Mesh(file)
         m.readGeo(file)
-        self.defineMesh(m)
+        self.setMesh(m)
 
-    def defineMesh(self, mesh: fem3d.Mesh):
+    def setMesh(self, mesh: fem3d.Mesh):
         """ Set the mesh instance and load the surfaces. """
         self.mesh = mesh
         for dimTag in self.mesh.model.getPhysicalGroups():
@@ -102,7 +102,7 @@ class Simulation():
         """ Set the output to the WAV files from the source and receivers. """
         self.outputPath = path
 
-    def run(self):
+    def run(self): #TODO: Write status?
         """ Run the simulation for each band and stores its results. """
         source_signals = {}
         time_arrays = {}
@@ -142,14 +142,13 @@ class Simulation():
                     self.mesh.model.occ.setMeshSize(pSurfaceTag,h_bc)
                     self.mesh.model.mesh.setSize(pSurfaceTag,h_bc)
 
-
             self.mesh.fac.synchronize()
             self.mesh.generate()
 
             #Assemble the FEM matrices
             engine = fem3d.Engine(self.mesh,self.element_order,self.element_order)
-            nddls = len(engine.ddl)
-            print('h: ',str(h), ' -- ddls:', nddls)
+            ndofs = len(engine.dof)
+            print('h: ',str(h), ' -- dofs:', ndofs)
             M = engine.M_Matrix()/(self.c**2)
             C = sparse.csc_matrix(M.shape)
             K = engine.K_Matrix()
@@ -188,10 +187,9 @@ class Simulation():
 
             time_monopole = Sources.monopole_by_band(tspan,band_range)
 
-            select_ddl = np.zeros(nddls)
-            select_ddl[idx_xS] = 1
-            forcing_function = lambda time_index: time_monopole[time_index] * select_ddl
-            F = engine.F_Matrix(forcing_function)
+            select_dof = np.zeros(ndofs)
+            select_dof[idx_xS] = 1
+            F = lambda time_index: time_monopole[time_index] * select_dof
 
             s,s_main = tengine.solve(tspan,F,idx_xR,[],1)
             receiver_signals[band] = s_main.T
@@ -244,10 +242,7 @@ class Simulation():
         receivers_fft = {}
 
         #Resample every signal to the max sampling frequency of the bands
-        min_band = str(np.min(list(map(int,self.source_signals.keys())))) #Band name/key
         max_band = str(np.max(list(map(int,self.source_signals.keys())))) #Band name/key
-        min_freq = np.min(self.bands_freq[min_band]) #Frequence value
-        max_freq = np.max(self.bands_freq[max_band]) #Frequence value
 
         #Get the max sampling frequency of the simulated signals
         max_fs = 1/(self.time_arrays[max_band][1]-self.time_arrays[max_band][0])
@@ -279,3 +274,31 @@ class Simulation():
         response = np.array(response)
 
         return frequencies, response
+
+    def getImpulseResponse(self): #TODO Impulse response from any signal
+        source_sum = np.zeros(max_size)
+        rec_sum = np.zeros(max_size)
+        bands_int = [50,63,80,100,125,160,200,250,315,400,500,630,800]
+        for bidx in range(0,len(bands_int)):
+            # if bidx==len(bands_int)-1: continue
+            if bidx==0:
+                bkey_low = str(bands_int[bidx])
+                cutoff = np.min(self.bands_freq[bkey_low])
+                ssig = self.source_signals[bkey_low]
+                rsig = self.receiver_signals[bkey_low][0]
+            else:
+                bkey_low = str(bands_int[bidx-1])
+                bkey_high = str(bands_int[bidx])
+                cutoff = np.max(self.bands_freq[bkey_low])
+                ssig = self.source_signals[bkey_high]
+                rsig = self.receiver_signals[bkey_high][0]
+
+            ssig_to_filt = np.zeros(max_size)
+            ssig_to_filt[:len(ssig)] = ssig
+            rsig_to_filt = np.zeros(max_size)
+            rsig_to_filt[:len(rsig)] = rsig
+
+            filter_low = signal.firwin(1001,cutoff,pass_zero='lowpass',fs=fs)
+            filter_high = signal.firwin(1001,cutoff,pass_zero='highpass',fs=fs)
+            source_sum = signal.filtfilt(filter_low,[1],source_sum) + signal.filtfilt(filter_high,[1],ssig_to_filt)
+            rec_sum = signal.filtfilt(filter_low,[1],rec_sum) + signal.filtfilt(filter_high,[1],rsig_to_filt)

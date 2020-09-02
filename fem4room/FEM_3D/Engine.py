@@ -9,7 +9,7 @@ class Engine:
         self.order = order
         self.formule = formule
         self.mesh = mesh
-        self.ddl,self.numDdl,self.u,self.dxu,self.dyu,self.dzu,self.omega = self.initializeMatrices('Lagrange')
+        self.dof,self.numDof,self.u,self.dxu,self.dyu,self.dzu,self.omega = self.initializeMatrices('Lagrange')
         
     def IntegrationPointsHat(self, formule: int):
         """Return the integration points of the reference tetrahedra"""
@@ -40,8 +40,8 @@ class Engine:
             phi, dxphi, dyphi, dzphi = self.LagrangeFunctions(xhat, yhat, zhat, order)
 
             if (order==1 or order==2): #GMSH generate the nodes
-                ddl = mesh.vertices
-                numDdl = np.array(mesh.tetrahedrons,dtype=np.int32)
+                dof = mesh.vertices
+                numDof = np.array(mesh.tetrahedrons,dtype=np.int32)
 
             mesh.calcJacobians()
             detJ = mesh.determinants
@@ -57,15 +57,15 @@ class Engine:
             dzhat_dy = J_inv[:,2,1]
             dzhat_dz = J_inv[:,2,2]
 
-            N_ddl = len(ddl)
+            N_dof = len(dof)
             N_int = len(mesh.tetrahedrons)*len(xhat)
             omega = np.zeros(N_int)
 
             #The sparse matrices will have for each line a integration point and each
-            #column a ddl. The number of integration points is the number of elements
+            #column a dof. The number of integration points is the number of elements
             #times the number of points per element. So, for each point of integration
             #we have a certain amount of base functions to evaluate, the amount of 
-            #ddl per element.
+            #dof per element.
             #Structure for sparse Matrix
             _i = np.zeros(N_int*len(phi[0]))
             _j = np.zeros(N_int*len(phi[0]))
@@ -79,7 +79,7 @@ class Engine:
                 omega[iglob] = omegaloc[iloc] * detJ
                 for jloc in range(0,len(phi[0])): #Base functions
                     _idx = jloc*N_int + iloc*len(iglob) + np.arange(0,len(iglob)) #Global stacked index for the sparse matrix
-                    jglob = numDdl[:,jloc]
+                    jglob = numDof[:,jloc]
                     _i[_idx] = iglob
                     _j[_idx] = jglob
                     _v_u[_idx] = np.ones(len(iglob))*phi[iloc,jloc]
@@ -89,16 +89,16 @@ class Engine:
             
             
             #Generate the matrices from the row/col indexes and values
-            u = sparse.coo_matrix((_v_u, (_i, _j)),(N_int,N_ddl))
-            dxu = sparse.coo_matrix((_v_dxu, (_i, _j)),(N_int,N_ddl))
-            dyu = sparse.coo_matrix((_v_dyu, (_i, _j)),(N_int,N_ddl))
-            dzu = sparse.coo_matrix((_v_dzu, (_i, _j)),(N_int,N_ddl))
+            u = sparse.coo_matrix((_v_u, (_i, _j)),(N_int,N_dof))
+            dxu = sparse.coo_matrix((_v_dxu, (_i, _j)),(N_int,N_dof))
+            dyu = sparse.coo_matrix((_v_dyu, (_i, _j)),(N_int,N_dof))
+            dzu = sparse.coo_matrix((_v_dzu, (_i, _j)),(N_int,N_dof))
             u = u.tocsc() 
             dxu = dxu.tocsc()
             dyu = dyu.tocsc()
             dzu = dzu.tocsc()
 
-        return np.array(ddl),np.array(numDdl),u,dxu,dyu,dzu,omega
+        return np.array(dof),np.array(numDof),u,dxu,dyu,dzu,omega
 
     def LagrangeFunctions(self, x, y, z, order: int):
         """ Get the values and of the base functions and its derivatives at the tetrahedra of reference. """ #TODO: Return what
@@ -142,12 +142,12 @@ class Engine:
         return K
 
     def F_Matrix(self, f):
-        """ Generate the forcing matrix. f is function of time index and return a vector with #DDLs values."""
+        """ Generate the forcing matrix. f is function of time index and return a vector with #DOFs values."""
         u,omega  = self.u,self.omega
         _ret = lambda time_index: u.multiply(f(time_index)).transpose().dot(omega)
         return _ret
 
-    def getValueByPosition(self, ddlValues, position):
+    def getValueByPosition(self, dofValues, position):
         """ Given the values of the degrees of freedom, it interpolates the lagrange functions to give the estimated value. Only works for Lagrange P1 elements. """
         etags = []
         coords_u = []
@@ -165,6 +165,6 @@ class Engine:
         tetraIndex = [np.where(self.mesh.tetraTags==etag)[0][0] for etag in etags]
         nodeIndex = self.mesh.tetrahedrons[tetraIndex]
         lFunction = self.LagrangeFunctions(coords_u,coords_v,coords_w,1)[0][0]
-        return np.dot(lFunction, np.transpose(ddlValues[:,nodeIndex],(0,2,1)))
+        return np.dot(lFunction, np.transpose(dofValues[:,nodeIndex],(0,2,1)))
 
     

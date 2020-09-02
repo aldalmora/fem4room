@@ -1,11 +1,7 @@
 data/*
 .vscode
 .opt
-*.ignore.*
-tests/*
-MESH/*
 *.pkl
-SAVES/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -145,3 +141,9 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# Others
+*.ignore.*
+tests_internship/*
+MESH/*
+SAVES/*

@@ -8,9 +8,9 @@ class Mesh:
     def MeshCube(name,Lx,Ly,Lz,h,order=1):
         """ Create and return an instance of a cubic mesh. """
         m = Mesh('Mesh3D')
-        cTag = m.createCube(Lx,Ly,Lz)
+        m.main_dTag = m.createCube(Lx,Ly,Lz)
         m.fac.synchronize()
-        dt_Boundary = m.model.getBoundary(cTag,recursive=True)
+        dt_Boundary = m.model.getBoundary(m.main_dTag,recursive=True)
         m.model.occ.setMeshSize(dt_Boundary,h)
         m.fac.synchronize()
         m.generate(order=order)
@@ -56,12 +56,22 @@ class Mesh:
     def createCube(self, dx,dy,dz):
         """ Add a cube to the mesh. Return the dimTag."""
         bTag = self.fac.addBox(0,0,0,dx,dy,dz)
-        return (3,bTag)
+        self.main_dTag = (3,bTag)
+        return self.main_dTag
 
     def createSphere(self, x, y, z, radius):
         """ Add a sphere to the mesh. Return the dimTag."""
         sTag = self.fac.addSphere(x,y,z,radius)
-        return (3,sTag)
+        self.main_dTag = (3,sTag)
+        return self.main_dTag
+
+    def addNamedPoint(self, x, y, z, name):
+        """ Add a point to the mesh and a physical group to it. Return the point dimTag."""
+        pTag = self.fac.addPoint(x,y,z)
+        self.fac.synchronize()
+        pg_point = self.model.addPhysicalGroup(0,[pTag])
+        self.model.setPhysicalName(0,pg_point,name)
+        return (0,pTag)
 
     def generate(self,order=1):
         """Generate the mesh with GMSH"""

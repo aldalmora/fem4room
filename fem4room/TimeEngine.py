@@ -59,14 +59,14 @@ class Newmark_iterative:
         K_prec = sla.LinearOperator(Keff.shape, Mx)
         return K_prec
         
-    def solve(self,tspan,F,main_ddls,saved_ddls,save_time_step): #TODO: Check if the F_Matrix is being passed
+    def solve(self,tspan,F,main_dofs,saved_dofs,save_time_step): #TODO: Check if the F_Matrix is being passed
         self.tspan=tspan
 
         Keff_solve = 0
         self.Keff_prec = self.preconditionate(self.Keff)
 
-        ret_u = [self.u0[saved_ddls]]
-        ret_main_ddls=[self.u0[main_ddls]]
+        ret_u = [self.u0[saved_dofs]]
+        ret_main_dofs=[self.u0[main_dofs]]
         u = self.u0
         du = self.du0
         ddu = self.ddu0
@@ -74,18 +74,18 @@ class Newmark_iterative:
             f_new = -F(i)
 
             u,du,ddu = self.iterate(Keff_solve,f_new,u,du,ddu)
-            ret_main_ddls.append(u[main_ddls])
+            ret_main_dofs.append(u[main_dofs])
 
             if i % save_time_step < 1e-20:
-                ret_u.append(u[saved_ddls])
+                ret_u.append(u[saved_dofs])
 
             Tools.Other.printInline('Time Step: ' + str(i+1) + '/' + str(len(tspan)))
 
-        ret_u = np.array(ret_u)
-        ret_main_ddls = np.array(ret_main_ddls)
+        ret_u = np.array(np.real(ret_u))
+        ret_main_dofs = np.array(np.real(ret_main_dofs))
         Tools.Other.printInline('\n\r')
         self.u = ret_u
-        return ret_u,ret_main_ddls
+        return ret_u,ret_main_dofs
 
     def iterate(self,Keff_solve,f_new,u,du,ddu):
         R_new = f_new + self.M.dot(self.a0*u + self.a2*du + self.a3*ddu) + self.C.dot(self.a1*u + self.a4*du + self.a5*ddu)
@@ -145,13 +145,13 @@ class Newmark:
         self.du0 = du0
         self.ddu0 = ddu0
         
-    def solve(self,tspan,f,main_ddls,saved_ddls,save_time_step):
+    def solve(self,tspan,f,main_dofs,saved_dofs,save_time_step):
         self.tspan=tspan
 
         Keff_solve = sla.factorized(self.Keff)
 
-        ret_u = [self.u0[saved_ddls]]
-        ret_main_ddls=[self.u0[main_ddls]]
+        ret_u = [self.u0[saved_dofs]]
+        ret_main_dofs=[self.u0[main_dofs]]
         u = self.u0
         du = self.du0
         ddu = self.ddu0
@@ -159,18 +159,18 @@ class Newmark:
             f_new = -f(i)
 
             u,du,ddu = self.iterate(Keff_solve,f_new,u,du,ddu)
-            ret_main_ddls.append(u[main_ddls])
+            ret_main_dofs.append(u[main_dofs])
 
             if i % save_time_step < 1e-20:
-                ret_u.append(u[saved_ddls])
+                ret_u.append(u[saved_dofs])
 
             Tools.Other.printInline('Time Step: ' + str(i+1) + '/' + str(len(tspan)))
 
         ret_u = np.array(ret_u)
-        ret_main_ddls = np.array(ret_main_ddls)
+        ret_main_dofs = np.array(ret_main_dofs)
         Tools.Other.printInline('\n\r')
         self.u = ret_u
-        return ret_u,ret_main_ddls
+        return ret_u,ret_main_dofs
 
     def iterate(self,Keff_solve,f_new,u,du,ddu):
         R_new = f_new + self.M.dot(self.a0*u + self.a2*du + self.a3*ddu) + self.C.dot(self.a1*u + self.a4*du + self.a5*ddu)
@@ -199,26 +199,26 @@ class LeapFrog():
         self.a0 = self.M.multiply(2) + self.C.multiply(self.dt)
         self.a1 = self.dt**2
 
-    def solve(self,tspan,f,u0,du0,ddu0,main_ddls,saved_ddls,save_time_step):
+    def solve(self,tspan,f,u0,du0,ddu0,main_dofs,saved_dofs,save_time_step):
         self.tspan=tspan
         sys_solve = sla.factorized(self.sys)
-        ret_u = [u0[saved_ddls]]
-        ret_main_ddls=[u0[main_ddls]]
+        ret_u = [u0[saved_dofs]]
+        ret_main_dofs=[u0[main_dofs]]
         u0 = u0
         u1 = u0
         for i in range(1,len(tspan)):
             f_new = -f(i)
             u_new = self.iterate(sys_solve,f_new,u0,u1)
-            ret_main_ddls.append(u_new[main_ddls])
+            ret_main_dofs.append(u_new[main_dofs])
             if i % save_time_step < 1e-20:
-                ret_u.append(u_new[saved_ddls])
+                ret_u.append(u_new[saved_dofs])
             u0=u1
             u1=u_new
 
         ret_u = np.array(ret_u)
-        ret_main_ddls = np.array(ret_main_ddls)
+        ret_main_dofs = np.array(ret_main_dofs)
         self.u = ret_u
-        return ret_u,ret_main_ddls
+        return ret_u,ret_main_dofs
 
     def iterate(self,sys_solve,f_new,u0,u1):
         R_new = self.a0*u1 - self.M.dot(u0) - self.a1*f_new

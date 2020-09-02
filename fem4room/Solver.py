@@ -25,10 +25,10 @@ class Solver():
         """ Solves (K+M)x = F """
         A = self.engine.K_Matrix() + self.engine.M_Matrix()
         F = self.engine.F_Matrix(f)
+        
+        return sla.spsolve(A,F)
 
-        idx_rcm = reverse_cuthill_mckee(A)
-        A = A[idx_rcm,:]
-        A = A[:,idx_rcm]
-        F = F(0)[idx_rcm]
+    def solve(self,A,F):
+        """ Solves (A)x = F """
         
         return sla.spsolve(A,F)

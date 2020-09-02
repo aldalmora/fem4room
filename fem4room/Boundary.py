@@ -6,35 +6,35 @@ from . import FEM_3D as fem3d
 class Boundary:
     @staticmethod
     def Apply_Dirichlet(engine, physical_group, M_full, C_full, K_full, f=None, g=None): #TODO: what do you expect for g(time and dof or only time)?
-        """ Apply the dirichlet boundary condition given the matrices, the physical group and f,g being functions in time index returning vectors with the values at the ddls. """
+        """ Apply the dirichlet boundary condition given the matrices, the physical group and f,g being functions in time index returning vectors with the values at the dofs. """
         
-        #Get DDLs which are not in the Dirichlet B.
-        ddl_interior_idx = np.argwhere(engine.mesh.vertice_group!=physical_group)[:,0]
+        #Get DOFs which are not in the Dirichlet B.
+        dof_interior_idx = np.argwhere(engine.mesh.vertice_group!=physical_group)[:,0]
 
-        #Remove DDLs from boundary
-        M = M_full[ddl_interior_idx,:]
-        M = M[:,ddl_interior_idx]
-        C = C_full[ddl_interior_idx,:]
-        C = C[:,ddl_interior_idx]
-        K = K_full[ddl_interior_idx,:]
-        K = K[:,ddl_interior_idx]
+        #Remove DOFs from boundary
+        M = M_full[dof_interior_idx,:]
+        M = M[:,dof_interior_idx]
+        C = C_full[dof_interior_idx,:]
+        C = C[:,dof_interior_idx]
+        K = K_full[dof_interior_idx,:]
+        K = K[:,dof_interior_idx]
 
         #Forcing function
         f = engine.F_Matrix(f)
-        F = lambda time_index: f(time_index)[ddl_interior_idx]
+        F = lambda time_index: f(time_index)[dof_interior_idx]
 
-        #Get only the DDls from the boundary and load the value of the function
-        ddl_boundary_idx = np.argwhere(engine.mesh.vertice_group==physical_group)[:,0]
-        G_Boundary = lambda time_index: g(time_index)[ddl_boundary_idx]
+        #Get only the DOFs from the boundary and load the value of the function
+        dof_boundary_idx = np.argwhere(engine.mesh.vertice_group==physical_group)[:,0]
+        G_Boundary = lambda time_index: g(time_index)[dof_boundary_idx]
 
         #Extra term that handles the Inhomogeneous Dirichlet B.C.
-        A_Boundary = (K_full[ddl_interior_idx,:]+ M_full[ddl_interior_idx,:])[:,ddl_boundary_idx]
+        A_Boundary = (K_full[dof_interior_idx,:]+ M_full[dof_interior_idx,:])[:,dof_boundary_idx]
         G = lambda time_index: A_Boundary.dot(G_Boundary(time_index))
 
         #Add the extra term to the RHS
         f_ret = lambda time_index: F(time_index) - G(time_index)
 
-        return M,C,K,f_ret,G_Boundary,ddl_interior_idx,ddl_boundary_idx
+        return M,C,K,f_ret,G_Boundary,dof_interior_idx,dof_boundary_idx
 
     @staticmethod
     def Impedance_Damping_Matrix(m3d, physical_group):
