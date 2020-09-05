@@ -73,9 +73,9 @@ for i in range(0,len(eig_f)):
     ################# Source Term
     dof_select = np.all(dofs==dof_source,axis=1)*1
     time_monopole = Sources.monopole_by_band(tspan,[fS],sigma=sigma_t)
-    f = lambda time_index: time_monopole[time_index] * dof_select
+    F = lambda time_index: time_monopole[time_index] * dof_select
 
-    s,s_main = tengine.solve(tspan,f,[],return_dofs,1)
+    s,s_main = tengine.solve(tspan,F,[],return_dofs,1)
 
     #Get only the last period of the simulation
     cycle_steps=int(np.round((1/fS)/dt))

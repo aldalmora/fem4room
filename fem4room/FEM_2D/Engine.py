@@ -1,10 +1,21 @@
 import numpy as np
 import scipy.sparse as sparse
+import sys
 
 
 class Engine:
     def __init__(self,mesh,order,formule,calcForMass3D=False):
-        """ Initialize the engine and assembles the support matrices """
+        """Initialize the engine and assembles the support matrices 
+
+        :param mesh: Instance of the mesh.
+        :type mesh: FEM_2D.Mesh
+        :param order: Order of the elements. [1 or 2]
+        :type order: int
+        :param formule: Formule for the numerical integration. Recommended >= (order)
+        :type formule: int
+        :param calcForMass3D: True if the mesh is in 3D space. Applies only for assembling the mass matrix. defaults to False
+        :type calcForMass3D: bool, optional
+        """
         self.order = order
         self.formule = formule
         self.mesh = mesh
@@ -12,7 +23,13 @@ class Engine:
         self.dof,self.numDof,self.u,self.dxu,self.dyu,self.omega = self.initializeMatrices('Lagrange')
         
     def IntegrationPointsHat(self,formule: int):
-        """Return the integration points of the reference triangle"""
+        """Return the integration points of the reference triangle
+
+        :param formule: Formule for the integration. [1 to 6]
+        :type formule: int
+        :return: (x,y,omega) ; x and y being the coordinates at the reference domain. Omega the weight of integration.
+        :rtype: Tuple of arrays
+        """
         xhat = []
         yhat = []
         omega = []
@@ -47,7 +64,22 @@ class Engine:
         return (np.array(xhat),np.array(yhat),np.array(omega))
 
     def initializeMatrices(self, typeEF):
-        """Generate the matrices with the values of the base functions, the dx, the dy and the weights for integration."""
+        """Generate the matrices with the values of the base functions, the dx, the dy and the weights for integration.
+
+        :param typeEF: Type of inteporlation. Only 'Lagrange'.
+        :type typeEF: string
+        :return: (dof,numDof,u,dxu,dyu,omega);
+        dof is the position of the degrees of freedom
+        numDof is the dofs that composes each element
+        u is the value of the interpolation function for each integration point
+        dxu is the derivative in x
+        dyu is the derivative in y
+        omega is the quadrature weight for each integration point
+        :rtype: (Array n x 3,Array e x 3,Matrix i x e,Matrix i x e,Array i); 
+        n being the number of degrees of freedom; 
+        e being the number of elements;
+        i being the number of integration points
+        """
         mesh,order,formule = self.mesh, self.order, self.formule
         xhat, yhat, omegaloc = self.IntegrationPointsHat(formule)
 
@@ -65,7 +97,7 @@ class Engine:
                     numDof.append([len(dof)-1])
                 numDof = np.array(numDof)
                 dof = np.array(dof)
-            elif (order==1 or order==2): #TODO: GMSH generate the nodes
+            elif (order==1 or order==2): #GMSH generate the nodes
                 dof = mesh.vertices
                 numDof = np.array(mesh.triangles,dtype=np.int32)
 
@@ -121,7 +153,18 @@ class Engine:
         return (np.array(dof),np.array(numDof),u,dxu,dyu,omega)
 
     def LagrangeFunctions(self, x, y, order):
-        """ Get the values and of the base functions and its derivatives at the triangle of reference. """
+        """Get the values and of the base functions and its derivatives at the triangle of reference.
+
+        :param x: Array of x positions in the domain of reference
+        :type x: array(float)
+        :param y: Array of y positions in the domain of reference
+        :type y: array(float)
+        :param order: Order of the Lagrange function. [1 or 2]
+        :type order: int
+        :raises Exception: If the Lagrange function order are no implemented
+        :return: (value,x derivative,y derivative)
+        :rtype: (array(float),array(float),array(float))
+        """
         phi = []
         dxphi = []
         dyphi = []
@@ -160,18 +203,27 @@ class Engine:
         return np.array(phi), np.array(dxphi), np.array(dyphi)
     
     def M_Matrix(self):
-        """ Generate the mass matrix """
+        """ Generate the mass matrix from the support matrices.
+
+        :return: The mass matrix.
+        :rtype: CSC Matrix
+        """
         u,omega  = self.u,self.omega
         M = u.transpose().dot(u.transpose().multiply(omega).transpose())
         M = M.tocsc()
 
         #Garantee int64 to UMFPACK
-        M.indices = M.indices.astype(np.int64)
-        M.indptr = M.indptr.astype(np.int64)
+        if 'scikits.umfpack' in sys.modules:
+            M.indices = M.indices.astype(np.int64)
+            M.indptr = M.indptr.astype(np.int64)
         return M
 
     def K_Matrix(self):
-        """ Generate the stiffness matrix """
+        """ Generate the stiffness matrix from the support matrices.
+
+        :return: The stiffness matrix.
+        :rtype: CSC Matrix
+        """
         dxu,dyu,omega  = self.dxu,self.dyu,self.omega
         G1 = dxu.transpose().dot(dxu.transpose().multiply(omega).transpose())
         G2 = dyu.transpose().dot(dyu.transpose().multiply(omega).transpose())
@@ -179,12 +231,19 @@ class Engine:
         K = K.tocsc()
 
         #Garantee int64 to UMFPACK
-        K.indices = K.indices.astype(np.int64)
-        K.indptr = K.indptr.astype(np.int64)
+        if 'scikits.umfpack' in sys.modules:
+            K.indices = K.indices.astype(np.int64)
+            K.indptr = K.indptr.astype(np.int64)
         return K
 
     def F_Matrix(self, f):
-        """ Generate the forcing matrix. f is function of time index and return a vector with #DOFs values."""
+        """Generate the forcing matrix.
+
+        :param f: The source-term with argument time_index that returns an array with the values for each dof.
+        :type f: function(int): Array
+        :return: A function that returns the F matrix for each time index
+        :rtype: function(int): Array
+        """
         u,omega  = self.u,self.omega
-        _ret = lambda time_index: u.multiply(f(time_index)).transpose().dot(omega) #TODO: Slow way of doing it
+        _ret = lambda time_index: u.multiply(f(time_index)).transpose().dot(omega) #TODO: Calculation can be faster
         return _ret

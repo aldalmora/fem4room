@@ -6,12 +6,28 @@ import matplotlib.pyplot as plt
 class Mesh:
     @staticmethod
     def MeshCube(name,Lx,Ly,Lz,h,order=1):
-        """ Create and return an instance of a cubic mesh. """
+        """Create and return an instance of a cubic mesh.
+
+        :param name: Mesh name
+        :type name: str
+        :param Lx: x length of the cube
+        :type Lx: float
+        :param Ly: y length of the cube
+        :type Ly: float
+        :param Lz: z length of the cube
+        :type Lz: float
+        :param h: Elements size
+        :type h: float
+        :param order: Order of the elements, only 1 is available, defaults to 1
+        :type order: int, optional
+        :return: The Mesh instance.
+        :rtype: FEM_3D.Mesh
+        """
         m = Mesh('Mesh3D')
         m.main_dTag = m.createCube(Lx,Ly,Lz)
         m.fac.synchronize()
         dt_Boundary = m.model.getBoundary(m.main_dTag,recursive=True)
-        m.model.occ.setMeshSize(dt_Boundary,h)
+        m.model.mesh.setSize(dt_Boundary,h)
         m.fac.synchronize()
         m.generate(order=order)
         return m
@@ -28,7 +44,9 @@ class Mesh:
         self.tetra = np.array([])
 
     def calcJacobians(self):
-        """Pre-calculate the determinants and inverse of the jacobian for all tetrahedrons."""
+        """Pre-calculate the determinants and inverse of the jacobian for all tetrahedrons.
+        Store it in .determinants and .inverses
+        """
         K = self.vertices[self.tetrahedrons]
         
         #Structure of K:
@@ -54,19 +72,53 @@ class Mesh:
         self.inverses = np.moveaxis(1/self.determinants * aux,2,0)
 
     def createCube(self, dx,dy,dz):
-        """ Add a cube to the mesh. Return the dimTag."""
+        """Add a cube to the mesh. Return the dimTag.
+
+        :param dx: x length
+        :type dx: float
+        :param dy: y length
+        :type dy: float
+        :param dz: z length
+        :type dz: float
+        :return: The dimension tag(GMSH) of the cube.  (dim, Tag)
+        :rtype: (int,int)
+        """
         bTag = self.fac.addBox(0,0,0,dx,dy,dz)
         self.main_dTag = (3,bTag)
         return self.main_dTag
 
     def createSphere(self, x, y, z, radius):
-        """ Add a sphere to the mesh. Return the dimTag."""
+        """Add a sphere to the mesh.
+
+        :param x: Center coordinate x
+        :type x: float
+        :param y: Center coordinate y
+        :type y: float
+        :param z: Center coordinate z
+        :type z: float
+        :param radius: Sphere radius
+        :type radius: float
+        :return: The dimension tag(GMSH) of the sphere.  (dim, Tag)
+        :rtype: (int,int)
+        """
         sTag = self.fac.addSphere(x,y,z,radius)
         self.main_dTag = (3,sTag)
         return self.main_dTag
 
     def addNamedPoint(self, x, y, z, name):
-        """ Add a point to the mesh and a physical group to it. Return the point dimTag."""
+        """Add a point to the mesh and a physical group to it. Return the point dimTag.
+
+        :param x: x coordinate
+        :type x: float
+        :param y: y coordinate
+        :type y: float
+        :param z: z coordinate
+        :type z: float
+        :param name: Name of the point. "physical group" (GMSH)
+        :type name: str
+        :return: The dimension tag(GMSH) of the point.  (dim, Tag)
+        :rtype: (int,int)
+        """
         pTag = self.fac.addPoint(x,y,z)
         self.fac.synchronize()
         pg_point = self.model.addPhysicalGroup(0,[pTag])
@@ -74,24 +126,41 @@ class Mesh:
         return (0,pTag)
 
     def generate(self,order=1):
-        """Generate the mesh with GMSH"""
+        """Generate the tetrahedrons elements of the mesh with GMSH
+
+        :param order: Order of the elements, only 1 is available, defaults to 1
+        :type order: int, optional
+        """
         self.model.mesh.generate(3)
         self.model.mesh.setOrder(order)
         self.model.mesh.removeDuplicateNodes()
         self.__fillVtxTri(order)
 
     def readGeo(self,file):
-        """ Open a .GEO file for geometry descriptions """
+        """Open a .GEO file for geometry descriptions 
+
+        :param file: File path/name.
+        :type file: str
+        """
         gmsh.open(file)
 
     def readMsh(self,file):
-        """Read a mshFile with GMSH. The elements must be tetrahedrons of order 1."""
+        """Read a mshFile with GMSH. The elements must be tetrahedrons of order 1.
+
+        :param file: File path/name
+        :type file: str
+        """
         gmsh.open(file)
         self.fac.synchronize()
         self.__fillVtxTri(1)
 
 #region DXF Reading
     def __DXFReadPoint(self,e):
+        """Read a point element from DXF.
+
+        :param e: DXF point element
+        :type e: DXF element
+        """
         # print('Point: ', e.dxf.layer)
         point_id = self.fac.addPoint(e.dxf.location[0],e.dxf.location[1],e.dxf.location[2])
         self.dxf_point_reference = np.array([e.dxf.location[0],e.dxf.location[1],e.dxf.location[2]])
@@ -100,6 +169,11 @@ class Mesh:
         self.dxf_points_names.append(e.dxf.layer)
 
     def __DXFReadPolyMesh(self,e):
+        """Read a face element from DXF.
+
+        :param e: DXF face
+        :type e: DXF element
+        """
         # print('Physical Group: ', e.dxf.layer)
         for f in e.faces():
             for v in f[0:3]: #Only for three node polymeshs
@@ -126,6 +200,11 @@ class Mesh:
                 
         
     def readDXF(self,file):
+        """Read a DXF geometry description.
+
+        :param file: File path/name
+        :type file: str
+        """
         self.dxf_points_ids = []
         self.dxf_points_names = []
         self.dxf_faces = []
@@ -220,7 +299,11 @@ class Mesh:
 #endregion
 
     def __fillVtxTri(self,order):
-        """Load the mesh infos(nodes and elements) in GMSH"""
+        """Load the mesh infos(nodes and elements) from GMSH
+
+        :param order: Order of the elements. Only 1 is available
+        :type order: int
+        """
         if order==1:
             tnodes = self.model.mesh.getNodesByElementType(4)
             unique, unique_indexes, unique_inverse = np.unique(tnodes[0],return_index=True,return_inverse=True)
@@ -252,5 +335,6 @@ class Mesh:
         return
 
     def FLTKRun(self):
-        """Opens the GMSH interface."""
+        """Opens the GMSH interface.
+        """
         gmsh.fltk.run()

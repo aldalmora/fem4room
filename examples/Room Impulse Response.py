@@ -9,7 +9,7 @@ import scipy.signal as signal
 import scipy.io.wavfile as wavfile
 import pickle as pkl
 
-nameSource = "Source_Genelec"
+nameSource = "Source_Omni"
 nameReceivers = ["Receiver_Ambi",
                 "Receiver_Array1",
                 "Receiver_Array2",
@@ -54,11 +54,11 @@ simulationsTime = {
 }
 
 # simulationsTime = {
-#     '50'    : 0
-#     ,'63'   : 0 
-#     ,'80'   : 0
-#     ,'100'  : 0
-#     ,'125'  : 0
+#     '50'   : 6
+#     ,'63'   : 4
+#     ,'80'   : 4
+#     ,'100'  : 3
+#     ,'125'  : 3
 #     ,'160'  : 0
 #     ,'200'  : 0
 #     ,'250'  : 0
@@ -117,21 +117,21 @@ Ultimate_Abs = {
     '800'  : 0.98
 }
 
-Rigid_Abs = {
-    '50'   : 0.01,
-    '63'   : 0.01,
-    '80'   : 0.01,
-    '100'  : 0.01,
-    '125'  : 0.01,
-    '160'  : 0.01,
-    '200'  : 0.01,
-    '250'  : 0.01,
-    '315'  : 0.01,
-    '400'  : 0.02,
-    '500'  : 0.02,
-    '630'  : 0.02,
-    '800'  : 0.02
-}
+# Rigid_Abs = {
+#     '50'   : 0.01,
+#     '63'   : 0.01,
+#     '80'   : 0.01,
+#     '100'  : 0.01,
+#     '125'  : 0.01,
+#     '160'  : 0.01,
+#     '200'  : 0.01,
+#     '250'  : 0.01,
+#     '315'  : 0.01,
+#     '400'  : 0.02,
+#     '500'  : 0.02,
+#     '630'  : 0.02,
+#     '800'  : 0.02
+# }
 
 Rigid_Abs = {
     '50'   : 0.012,
@@ -154,7 +154,7 @@ simulation = Simulation(simulationsTime,nameSource,nameReceivers)
 # simulation.readGeometryDXF('examples/ReverberantRoom.dxf')
 simulation.readGeometryGEO('examples/RoomWool.geo')
 
-simulation.setOutputPath('C:/Simulations/NP4_Genelec(GMSH Adj)/')
+# simulation.setOutputPath('/') 
 simulation.setMaxStepSize(0.4)
 simulation.setParameters(c=340, elementsPerWavelength=6, cfl=.8)
 
@@ -165,3 +165,20 @@ simulation.setAbsorption("Vieillelaine", Ultimate_Abs)
 simulation.setAbsorption("Rigid_Surface", Rigid_Abs)
 times,source_signals,receiver_signals = simulation.run()
 frequencies_all, response_all = simulation.calcFrequencyResponse()
+
+plt.figure()
+plt.title('Frequency response')
+plt.semilogy(frequencies_all,np.abs(response_all))
+plt.xlabel('Frequency(Hz)')
+plt.ylabel('Amplitude')
+
+fs=16000
+impulse = simulation.assembleResponse(fs=fs)
+tspan = np.arange(0,len(impulse))*(1/fs)
+plt.figure()
+plt.title('Limited Impulse Response')
+plt.plot(tspan,impulse)
+plt.xlabel('time(s)')
+plt.ylabel('Amplitude')
+
+plt.show()

@@ -33,7 +33,7 @@ for h in _h:
     bTag = m.fac.addSphere(0,0,0,1)
     m.fac.synchronize()
     dt_Boundary = m.model.getBoundary((3,bTag),recursive=True) #Get the nodes from the boundary/surface
-    m.model.occ.setMeshSize(dt_Boundary,h)
+    m.model.mesh.setSize(dt_Boundary,h)
     dt_Surfaces = m.model.getBoundary((3,bTag))
     m.model.addPhysicalGroup(2,np.array(dt_Surfaces)[:,1],1)
     m.fac.synchronize()

@@ -1,10 +1,11 @@
 import numpy as np
 import scipy.sparse as sparse
 import scipy.sparse.linalg as sla
+import sys
 from . import Tools
-import scikits.umfpack
 
 class Newmark_iterative:
+    """Encapsulates the Newmark Method using the iterative solver gcrotmk"""
     # M ddu + C du + K u = f
     # a0 = 1/(alpha*dt**2)
     # a1 = delta/(alpha*dt)
@@ -22,6 +23,21 @@ class Newmark_iterative:
     # alpha > 0.25(0.5 + delta)^2
     # Triangularize Keff
     def __init__(self,M,C,K,dt,alpha,delta):
+        """ Initialize the Newmark method.
+
+        :param M: The mass matrix.
+        :type M: CSC Matrix
+        :param C: [description]
+        :type C: CSC Matrix
+        :param K: [description]
+        :type K: CSC Matrix
+        :param dt: Time-step
+        :type dt: float
+        :param alpha: Alpha parameter (Newmark's Method)
+        :type alpha: float
+        :param delta: Delta parameter (Newmark's Method)
+        :type delta: float
+        """
         self.alpha = alpha
         self.delta = delta
         self.dt = dt
@@ -38,10 +54,11 @@ class Newmark_iterative:
 
         self.M = M
         self.C = C
-        sla.use_solver(useUmfpack=True)
         self.Keff = K + M.multiply(self.a0) + C.multiply(self.a1)
-        self.Keff.indices = self.Keff.indices.astype(np.int)
-        self.Keff.indptr = self.Keff.indptr.astype(np.int)
+        if 'scikits.umfpack' in sys.modules:
+            sla.use_solver(useUmfpack=True)
+            self.Keff.indices = self.Keff.indices.astype(int)
+            self.Keff.indptr = self.Keff.indptr.astype(int)
 
         #Initial conditions
         self.u0 = np.zeros(M.shape[0])
@@ -49,17 +66,48 @@ class Newmark_iterative:
         self.ddu0 = np.zeros(M.shape[0])
 
     def setInitialConditions(self,u0,du0,ddu0):
+        """Set the initial conditions for each DOF
+
+        :param u0: Pressure
+        :type u0: Array
+        :param du0: Velocity
+        :type du0: Array
+        :param ddu0: Acceleration
+        :type ddu0: Array
+        """
         self.u0 = u0
         self.du0 = du0
         self.ddu0 = ddu0
 
     def preconditionate(self,Keff):
+        """Preconditionate the matrix using SuperLU
+
+        :param Keff: The matrix do be preconditionated
+        :type Keff: CSC Matrix
+        :return: Linear operator of the preconditionated matrix
+        :rtype: CSC Matrix
+        """
         ilu = sla.spilu(Keff)
         Mx = lambda x: ilu.solve(x)
         K_prec = sla.LinearOperator(Keff.shape, Mx)
         return K_prec
         
-    def solve(self,tspan,F,main_dofs,saved_dofs,save_time_step): #TODO: Check if the F_Matrix is being passed
+    def solve(self,tspan,F,main_dofs,saved_dofs,save_time_step):
+        """Solve the FEM system in time using the Newmark's Method.
+
+        :param tspan: Time-steps
+        :type tspan: Array
+        :param F: Forcing vector
+        :type F: Array
+        :param main_dofs: Index of the degrees of freedom which will be returned with all time-steps
+        :type main_dofs: Array
+        :param saved_dofs: Index of the degrees of freedom which will be returned with part of the time-steps
+        :type saved_dofs: Array
+        :param save_time_step: For the saved_dofs, save the solution each number of time-steps
+        :type save_time_step: int
+        :return: Solution at the saved_dofs and main_dofs. Time steps x DOFs
+        :rtype: Array; Array
+        """
         self.tspan=tspan
 
         Keff_solve = 0
@@ -88,6 +136,7 @@ class Newmark_iterative:
         return ret_u,ret_main_dofs
 
     def iterate(self,Keff_solve,f_new,u,du,ddu):
+        """Newmark's iteration"""
         R_new = f_new + self.M.dot(self.a0*u + self.a2*du + self.a3*ddu) + self.C.dot(self.a1*u + self.a4*du + self.a5*ddu)
 
         u_new = sla.gcrotmk(self.Keff,R_new,M=self.Keff_prec,x0=u,atol=1e-5)[0]
@@ -114,6 +163,21 @@ class Newmark:
     # alpha > 0.25(0.5 + delta)^2
     # Triangularize Keff
     def __init__(self,M,C,K,dt,alpha,delta):
+        """Initialize the Newmark method.
+
+        :param M: The mass matrix.
+        :type M: CSC Matrix
+        :param C: [description]
+        :type C: CSC Matrix
+        :param K: [description]
+        :type K: CSC Matrix
+        :param dt: Time-step
+        :type dt: float
+        :param alpha: Alpha parameter (Newmark's Method)
+        :type alpha: float
+        :param delta: Delta parameter (Newmark's Method)
+        :type delta: float
+        """
         self.alpha = alpha
         self.delta = delta
         self.dt = dt
@@ -130,10 +194,11 @@ class Newmark:
 
         self.M = M
         self.C = C
-        sla.use_solver(useUmfpack=True)
         self.Keff = K + M.multiply(self.a0) + C.multiply(self.a1)
-        self.Keff.indices = self.Keff.indices.astype(np.int64)
-        self.Keff.indptr = self.Keff.indptr.astype(np.int64)
+        if 'scikits.umfpack' in sys.modules:
+            sla.use_solver(useUmfpack=True)
+            self.Keff.indices = self.Keff.indices.astype(np.int64)
+            self.Keff.indptr = self.Keff.indptr.astype(np.int64)
 
         #Initial conditions
         self.u0 = np.zeros(M.shape[0])
@@ -141,11 +206,35 @@ class Newmark:
         self.ddu0 = np.zeros(M.shape[0])
 
     def setInitialConditions(self,u0,du0,ddu0):
+        """Set the initial conditions for each DOF
+
+        :param u0: Pressure
+        :type u0: Array
+        :param du0: Velocity
+        :type du0: Array
+        :param ddu0: Acceleration
+        :type ddu0: Array
+        """
         self.u0 = u0
         self.du0 = du0
         self.ddu0 = ddu0
         
     def solve(self,tspan,f,main_dofs,saved_dofs,save_time_step):
+       """Solve the FEM system in time using the Newmark's Method.
+
+        :param tspan: Time-steps
+        :type tspan: Array
+        :param F: Forcing vector
+        :type F: Array
+        :param main_dofs: Index of the degrees of freedom which will be returned with all time-steps
+        :type main_dofs: Array
+        :param saved_dofs: Index of the degrees of freedom which will be returned with part of the time-steps
+        :type saved_dofs: Array
+        :param save_time_step: For the saved_dofs, save the solution each number of time-steps
+        :type save_time_step: int
+        :return: Solution at the saved_dofs and main_dofs. Time steps x DOFs
+        :rtype: Array; Array
+        """
         self.tspan=tspan
 
         Keff_solve = sla.factorized(self.Keff)
@@ -173,6 +262,7 @@ class Newmark:
         return ret_u,ret_main_dofs
 
     def iterate(self,Keff_solve,f_new,u,du,ddu):
+        """Newmark's iteration"""
         R_new = f_new + self.M.dot(self.a0*u + self.a2*du + self.a3*ddu) + self.C.dot(self.a1*u + self.a4*du + self.a5*ddu)
 
         u_new = Keff_solve(R_new)
@@ -191,10 +281,11 @@ class LeapFrog():
         self.M = M
         self.C = C
         self.K = K
-        sla.use_solver(useUmfpack=True)
         self.sys = M + dt*C + (dt**2)*K
-        self.sys.indices = self.sys.indices.astype(np.int64)
-        self.sys.indptr = self.sys.indptr.astype(np.int64)
+        if 'scikits.umfpack' in sys.modules:
+            sla.use_solver(useUmfpack=True)
+            self.sys.indices = self.sys.indices.astype(np.int64)
+            self.sys.indptr = self.sys.indptr.astype(np.int64)
 
         self.a0 = self.M.multiply(2) + self.C.multiply(self.dt)
         self.a1 = self.dt**2

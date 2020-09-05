@@ -11,7 +11,7 @@ import numpy.linalg as la
 import time
 
 import fem4room.FEM_2D as fem
-from fem4room import Boundary
+from fem4room import Boundary,Solver
 
 _h = [0.09,0.08,0.07,0.06]
 orders = [1,2]
@@ -44,7 +44,8 @@ for h in _h:
         print('K & M Matrices ' + str(K.shape) + ' - ' + str(t2_m-t1_m))
 
         t1_e = time.time()
-        w,v = sla.eigs(K,30,M,sigma=0,which='LM') #TODO: Change to Solver
+        solver = Solver(engine)
+        w,v = solver.eig(K,M,30,0,'LM')
         t2_e = time.time()
         print('EIGS - ' + str(t2_e-t1_e))
 
@@ -81,6 +82,7 @@ plt.loglog(_h,10**-1 * np.array(_h)**2,'k-+') #Reference line
 plt.legend(['Error(1)','Error(2)','$h^{-2}$'])
 plt.xlabel('h')
 plt.ylabel('|Error|')
+plt.title('Convergence')
 
 plt.figure()
 plt.loglog(dofs,t_matrices)
@@ -90,5 +92,6 @@ plt.loglog(dofs,5*(10**-8) * np.array(dofs,dtype=np.float64)**2,'k-+') #Referenc
 plt.legend(['Matrices','EIGS','Ref(1)','Ref(2)'])
 plt.xlabel('#dof')
 plt.ylabel('t(s)')
+plt.title('Calculation time')
  
 plt.show()

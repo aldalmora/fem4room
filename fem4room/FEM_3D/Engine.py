@@ -1,18 +1,34 @@
 import numpy as np
 import numpy.linalg as la
 import scipy.sparse as sparse
+import sys
 
 from .Mesh import Mesh
 
 class Engine:
     def __init__(self, mesh: Mesh, order: int, formule: int):
+        """Initialize the engine and assembles the support matrices 
+
+        :param mesh: Instance of the mesh.
+        :type mesh: FEM_3D.Mesh
+        :param order: Order of the elements. Only order 1 is available.
+        :type order: int
+        :param formule: Formule for the numerical integration. Only 1 is available.
+        :type formule: int
+        """
         self.order = order
         self.formule = formule
         self.mesh = mesh
         self.dof,self.numDof,self.u,self.dxu,self.dyu,self.dzu,self.omega = self.initializeMatrices('Lagrange')
         
     def IntegrationPointsHat(self, formule: int):
-        """Return the integration points of the reference tetrahedra"""
+        """Return the integration points of the reference tetrahedra
+
+        :param formule: Formule for the integration. Only 1 is available.
+        :type formule: int
+        :return: (x,y,z,omega) ; x, y and z being the coordinates at the reference domain. Omega the weight of integration.
+        :rtype: Tuple of arrays
+        """
         xhat = []
         yhat = []
         zhat = []
@@ -32,7 +48,23 @@ class Engine:
         return (np.array(xhat), np.array(yhat), np.array(zhat), np.array(omega))
 
     def initializeMatrices(self, typeEF: str):
-        """Generate the matrices with the values of the base functions, the dx, dy, dz and the weights for integration."""
+        """Generate the matrices with the values of the base functions, the dx, dy, dz and the weights for integration.
+
+        :param typeEF: Type of inteporlation. Only 'Lagrange'.
+        :type typeEF: str
+        :return: (dof,numDof,u,dxu,dyu,dzu,omega);
+        dof is the position of the degrees of freedom
+        numDof is the dofs that composes each element
+        u is the value of the interpolation function for each integration point
+        dxu is the derivative in x
+        dyu is the derivative in y
+        dzu is the derivative in z
+        omega is the quadrature weight for each integration point
+        :rtype: (Array n x 3, Array e x 3, Matrix i x e, Matrix i x e, Matrix i x e, Array i); 
+        n being the number of degrees of freedom; 
+        e being the number of elements;
+        i being the number of integration points
+        """
         mesh,order,formule = self.mesh, self.order, self.formule
         xhat, yhat, zhat, omegaloc = self.IntegrationPointsHat(formule)
 
@@ -101,7 +133,20 @@ class Engine:
         return np.array(dof),np.array(numDof),u,dxu,dyu,dzu,omega
 
     def LagrangeFunctions(self, x, y, z, order: int):
-        """ Get the values and of the base functions and its derivatives at the tetrahedra of reference. """ #TODO: Return what
+        """ Get the values and of the base functions and its derivatives at the tetrahedra of reference.
+
+        :param x: Array of x positions in the domain of reference
+        :type x: array(float)
+        :param y: Array of y positions in the domain of reference
+        :type y: array(float)
+        :param z: Array of z positions in the domain of reference
+        :type z: array(float)
+        :param order: Order of the Lagrange function. Only 1 is available.
+        :type order: int
+        :raises Exception: If the Lagrange function order are no implemented
+        :return: (value,x derivative,y derivative,z derivative)
+        :rtype: (array(float),array(float),array(float),array(float))
+        """
         phi = []
         dxphi = []
         dyphi = []
@@ -117,18 +162,27 @@ class Engine:
         return np.array(phi), np.array(dxphi), np.array(dyphi), np.array(dzphi)
     
     def M_Matrix(self):
-        """ Generate the mass matrix """
+        """ Generate the mass matrix from the support matrices.
+
+        :return: The mass matrix.
+        :rtype: CSC Matrix
+        """
         u,omega  = self.u,self.omega
         M = u.transpose().dot(u.transpose().multiply(omega).transpose())
         M = M.tocsc()
 
         #Garantee int64 to UMFPACK
-        M.indices = M.indices.astype(np.int64)
-        M.indptr = M.indptr.astype(np.int64)
+        if 'scikits.umfpack' in sys.modules:
+            M.indices = M.indices.astype(np.int64)
+            M.indptr = M.indptr.astype(np.int64)
         return M
 
     def K_Matrix(self):
-        """ Generate the stiffness matrix """
+        """ Generate the stiffness matrix from the support matrices.
+
+        :return: The stiffness matrix.
+        :rtype: CSC Matrix
+        """
         dxu,dyu,dzu,omega  = self.dxu,self.dyu,self.dzu,self.omega
         G1 = dxu.transpose().dot(dxu.transpose().multiply(omega).transpose())
         G2 = dyu.transpose().dot(dyu.transpose().multiply(omega).transpose())
@@ -137,18 +191,33 @@ class Engine:
         K = K.tocsc()
 
         #Garantee int64 to UMFPACK
-        K.indices = K.indices.astype(np.int64)
-        K.indptr = K.indptr.astype(np.int64)
+        if 'scikits.umfpack' in sys.modules:
+            K.indices = K.indices.astype(np.int64)
+            K.indptr = K.indptr.astype(np.int64)
         return K
 
     def F_Matrix(self, f):
-        """ Generate the forcing matrix. f is function of time index and return a vector with #DOFs values."""
+        """Generate the forcing matrix.
+
+        :param f: The source-term with argument time_index that returns an array with the values for each dof.
+        :type f: function(int): Array
+        :return: A function that returns the F matrix for each time index
+        :rtype: function(int): Array
+        """
         u,omega  = self.u,self.omega
         _ret = lambda time_index: u.multiply(f(time_index)).transpose().dot(omega)
         return _ret
 
     def getValueByPosition(self, dofValues, position):
-        """ Given the values of the degrees of freedom, it interpolates the lagrange functions to give the estimated value. Only works for Lagrange P1 elements. """
+        """Given the values of the degrees of freedom, it interpolates the lagrange functions to give the estimated value. Only works for Lagrange P1 elements.
+
+        :param dofValues: The values at all degrees of freedom
+        :type dofValues: Array
+        :param position: Position to be evaluated using intepolation
+        :type position: Array(3)
+        :return: The interpolated value at the position.
+        :rtype: float
+        """
         etags = []
         coords_u = []
         coords_v = []

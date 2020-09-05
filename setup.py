@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="fem4room",
-    version="0.0.1.dev4",
+    version="0.0.2.dev4",
     author="André Luiz Dalmora",
     author_email="andre.dalmora@gmail.com",
     description="Room Acoustics Simulation. Retrieve room impulse response using finite elements method.",
@@ -16,10 +16,9 @@ setuptools.setup(
     setup_requires=['wheel','numpy'],
     install_requires=[
         'scipy',
-        'gmsh-sdk==4.4.1.post1',
-        'matplotlib~=3.2.1',
-        'ezdxf~=0.13.1',
-        'scikit-umfpack==0.3.1'
+        'gmsh-sdk>=4.6',
+        'matplotlib>=3',
+        'ezdxf~=0.13.1'
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
@@ -28,6 +27,6 @@ setuptools.setup(
         "Topic :: Scientific/Engineering",
         "Development Status :: 4 - Beta"
     ],
-    python_requires='~=3.6',
+    python_requires='>=3.6',
     keywords="room acoustics finite elements method impulse response",
 )

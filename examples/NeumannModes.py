@@ -13,7 +13,7 @@ c=340.
 
 #Source frequency
 f_bands={'50':[50,100]}
-simulation_times = {'50':1}
+simulation_times = {'50':3}
 wavelength = c/np.array(f_bands['50'])
 
 #Geometry
@@ -34,7 +34,9 @@ eig_f = _ev_cube*c/(2*np.pi)
 #Simulation Conf.
 sName = 'Source'
 xS = np.array([Lx/3,Ly/3.1,Lz/1.75])
-rNames = ['1','2','3','4','5']
+#Receiver Names
+rNames = ['1','2','3','4','5'] 
+#Receiver Positions
 xR = np.array([[Lx/10,Ly/10,Lz/10],[Lx/1.1,Ly/1.5,Lz/2],[Lx/3,Ly/3,Lz/3],[Lx/4,Ly/2,Lz/1.3],[Lx/2,Ly/4,Lz/3]])
 
 m = fem.Mesh('Mesh')
@@ -48,7 +50,7 @@ for i_xr in range(0,len(xR)):
 simulation = Simulation(simulation_times,sName,rNames)
 simulation.setMesh(m)
 simulation.setFrequencyBands(f_bands)
-simulation.elementsPerWavelength = 10
+# simulation.setParameters(elementsPerWavelength=10)
 time_arrays,source_signals,receiver_signals = simulation.run()
 
 plt.figure()

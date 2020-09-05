@@ -14,14 +14,24 @@ class Sources():
 
     @staticmethod
     def monopole_by_band(t_,band,sigma=None):
-        """ Return a forcing function representing a monopole source with max amplitude 1 at 1 meter. 
-        The signal is a gaussian with the given cutoff frequencies (3dB). """
+        """Return a forcing function representing a monopole source with max amplitude 1 at 1 meter. 
+        The signal is a gaussian with the given cutoff frequencies (3dB).
+
+        :param t_: Time-steps
+        :type t_: Array
+        :param band: Cutoff frequencies of the band to be covered
+        :type band: int;int
+        :param sigma: Bandwidth, defaults to None
+        :type sigma: float, optional
+        :return: Forcing function in time
+        :rtype: Array
+        """
         freq = (np.max(band)+np.min(band))/2 #Center frequency
         omega = 2*np.pi*freq
 
         if sigma==None:
             fc = (np.max(band)-np.min(band))
-            sigma=1/(2*np.pi*fc/4) #TODO: what is the best bandwidth?
+            sigma=1/(2*np.pi*fc/4) #TODO: What is the best sigma? To be studied
 
         t=t_-5*sigma #Shifts the gaussian so it can start at zero.
 
@@ -32,14 +42,36 @@ class Sources():
 class Visualization():
     @staticmethod
     def addView(mesh,viewName,timeData,nodeTags):
-        """timeData must be (Timesteps)x(#dof)"""
+        """Add the view to GMSH.
+
+        :param mesh: Mesh instance
+        :type mesh: FEM_2D.Mesh; FEM_3D.Mesh
+        :param viewName: name of the new view
+        :type viewName: str
+        :param timeData: Values at the DOF to be shown
+        :type timeData: Array (Timesteps)x(#dof)
+        :param nodeTags: Node tags for each dof
+        :type nodeTags: Array
+        """
         viewTag = mesh.pos.add(viewName)
         for i_timeData in range(0,len(timeData)):
             mesh.pos.addModelData(viewTag,i_timeData,mesh.name,'NodeData',nodeTags,timeData[i_timeData].reshape(-1,1),numComponents=1)
 
     @staticmethod
     def showTime(mesh,viewNames,data,view_dofs,fltkrun=True):
-        """data must be (Views)x(Timesteps)x(#dof)"""
+        """Add the solution to the GMSH viewer.
+
+        :param mesh: Mesh instance
+        :type mesh: FEM_2D.Mesh; FEM_3D.Mesh
+        :param viewName: name of the new view
+        :type viewName: str
+        :param data: Values at the DOF to be shown
+        :type data: Array (Views)x(Timesteps)x(#dof)
+        :param view_dofs: Index of the degrees of freedom that will be shown
+        :type view_dofs: Array
+        :param fltkrun: If the GMSH interface will be open automatically, defaults to True
+        :type fltkrun: bool, optional
+        """
         for i_view in range(0,len(data)):
             nodeTags = mesh.nodeTags[view_dofs[i_view]]
             timeData = data[i_view]
@@ -48,35 +80,18 @@ class Visualization():
         if (fltkrun):
             mesh.FLTKRun()
 
-class SaveLoad():
-    def save(self,name,saved_dofs,dof,sln,sln_main,tspan):
-        """Save the mesh and the main infos about the numerical result."""
-        self.dof = dof
-        self.sln = sln
-        self.sln_main = sln_main
-        self.tspan = tspan
-        self.saved_dofs = saved_dofs
-        gmsh.option.setNumber('Mesh.SaveAll',1)
-        gmsh.write('data/' + name + '.msh')
-        with open('data/' + name + '.pickle', 'wb') as f:
-            pk.dump(self, f, pk.HIGHEST_PROTOCOL)
-
-    def load(self,name,m):
-        """Load the mesh and the main infos about a numerical result."""
-        gmsh.open('data/' + name + '.msh')
-        m.readMsh('data/' + name + '.msh')
-        with open('data/' + name + '.pickle', 'rb') as f:
-            T = pk.load(f)
-            self.dof = T.dof
-            self.sln = T.sln
-            self.sln_main = T.sln_main
-            self.tspan = T.tspan
-            self.saved_dofs = T.saved_dofs
-
 class Other():
     @staticmethod
-    def nearest_dof(dofs,x): #TODO: Not here
-        """Return the index of the nearest 3D degree of freedom"""
+    def nearest_dof(dofs,x):
+        """Return the index of the nearest 3D degree of freedom
+
+        :param dofs: The DOF coordinates
+        :type dofs: Array n x 3
+        :param x: The coordinate
+        :type x: Array(3)
+        :return: The index of the nearest degree of freedom
+        :rtype: int
+        """
         idx = np.argmin(la.norm(dofs - x,axis=1))
         return idx
 
@@ -86,52 +101,17 @@ class Other():
 
     @staticmethod
     def wiener_deconvolution(output, input, SNR=1):
-        input = np.hstack((input, np.zeros(len(output) - len(input)))) # zero pad the kernel to same length
+        """Does a deconvolution of signals using the Wiener filter. The signals must have the same length
+
+        :param output: The output signal
+        :type output: Array
+        :param input: The input signal
+        :type input: Array
+        :param SNR: The signal-to-noise ratio, defaults to 1
+        :type SNR: float, optional
+        :return: The deconvolved signal. A representation of the impulse response of the system
+        :rtype: Array
+        """
         H = fft.fft(input)
         deconvolved = np.real(fft.ifft(fft.fft(output)*np.conj(H)/(H*np.conj(H) + SNR**2)))
         return deconvolved
-
-    @staticmethod
-    def resample(signal,from_fs,to_fs,from_duration,to_duration):#TODO Resample
-        return 
-
-# class RoomResponse():
-#     """ Class that handles the calculation of the impulse response. """
-
-#     def __init__(self,M,C,K,c,dt,tf,f_band,idx_xS,idx_xR):
-#         self.M = M
-#         self.C = C
-#         self.K = K
-#         self.c = c
-#         self.dt = dt
-#         self.tf = tf
-#         self.f_band = f_band
-#         self.idx_xS = idx_xS  #TODO: uses the interpolation to get the value
-#         self.idx_xR = idx_xR
-#         self.ndofs = M.shape[0]
-        
-#         self.tspan = np.arange(0,self.tf,self.dt)
-#         self.tengine = TimeEngine.Newmark_iterative(self.M,self.C,self.K,self.dt,alpha=.25,delta=.5)
-
-#         self.time_monopole = Sources.monopole_by_band(self.tspan,self.f_band)
-
-#         select_dof = np.zeros(self.ndofs)
-#         select_dof[idx_xS] = 1
-#         self.forcing_function = lambda time_index: self.time_monopole[time_index] * select_dof
-
-#     def run(self):
-#         """ Calculate the room response and return: Discretized frequencies, input spectrum, output spectrum, frequency response, output time response. """
-#         s,s_main = self.tengine.solve(self.tspan,self.forcing_function,self.idx_xR,[],1)
-
-#         all_frequencies=fft.rfftfreq(len(self.tspan),self.dt)
-#         valid_band_idx = np.arange((np.abs(all_frequencies-self.f_band[0])).argmin(),(np.abs(all_frequencies-self.f_band[1])).argmin()+1)
-#         frequencies = all_frequencies[valid_band_idx]
-#         pressure1m = np.array([self.forcing_function(i)[self.idx_xS] for i in range(0,len(self.tspan))])/(4*np.pi) # Forcing divided by 4pi so the reference pressure be at distance 1
-#         f_pressure1m = fft.rfft(pressure1m)[valid_band_idx]
-#         f_result = []
-#         f_ratio = []
-#         for idx in range(0,len(self.idx_xR)):
-#             f_result.append(fft.rfft(s_main[:,idx])[valid_band_idx])
-#             f_ratio.append(fft.rfft(s_main[:,idx])[valid_band_idx]/f_pressure1m) #
-
-#         return frequencies,f_pressure1m,f_result,f_ratio,s_main

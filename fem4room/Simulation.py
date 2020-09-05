@@ -1,6 +1,6 @@
 
 import numpy as np
-from . import TimeEngine,Boundary,Sources
+from . import TimeEngine,Boundary,Sources,Other
 from . import FEM_3D as fem3d
 import gmsh
 import scipy.sparse as sparse
@@ -12,13 +12,23 @@ import pickle as pkl
 
 #TODO: Userfriendly errors and instructions
 class Simulation():
-    """ Class that handles the calculation of the room response (time and frequency) for a given mesh with defined impedances at a surface. """
+    """Class that handles the calculation of the room response (time and frequency) for a 
+    given mesh with defined impedances at a surface.
+    """
 
     def __init__(self,simulationsTime,nameSource,nameReceivers):
-        """ Initialize the simulation configurations. """
+        """Initialize the simulation configurations.
+
+        :param simulationsTime: Dictionary of bands with the simulation times.
+        :type simulationsTime: Dict(String;float)
+        :param nameSource: Physical group name(GMSH) of the source node.  
+        :type nameSource: string
+        :param nameReceivers: Physical group name(GMSH) of the receivers nodes. 
+        :type nameReceivers: Array(string)
+        """
         self.nameSource = nameSource
         self.nameReceivers = nameReceivers
-        self.simulationsTime = simulationsTime #TODO: Check sizes before simulation
+        self.simulationsTime = simulationsTime
 
         #Default parameters
         self.c = 340.
@@ -50,60 +60,114 @@ class Simulation():
         '800'  : [ 707.107 , 890.899 ]} 
 
     def setFrequencyBands(self,bands):
-        """ Change the dictionary of bands and its cut-off frequencies. """
+        """Change the dictionary of bands and its cut-off frequencies.
+
+        :param bands: Dictionary of the band edges
+        :type bands: Dict(string;Array)
+        """
         self.bands_freq = bands
 
     def setParameters(self,c=340.,elementsPerWavelength=6,cfl=.8):
-        """ Change the default parameters for sound speed, elements per wavelength and the CFL condition number. """
+        """Change the default parameters for sound speed, elements per wavelength and the CFL condition number.
+
+        :param c: Sound speed, defaults to 340.
+        :type c: float, optional
+        :param elementsPerWavelength: Number of elements per wavelength, defaults to 6
+        :type elementsPerWavelength: int, optional
+        :param cfl: CFL condition number, defaults to .8
+        :type cfl: float, optional
+        """
         self.c = c
         self.elementsPerWavelength = elementsPerWavelength
         self.cfl = cfl
 
     def setMaxStepSize(self, h):
-        """ Define a max-size for the elements size. """
+        """Define a max-size for the elements size.
+
+        :param h: Elements size
+        :type h: float
+        """
         self.max_h = h
 
     def setBCRefinement(self, max_h):
-        """ Set specific mesh-size for the meshes at boundaries. """
+        """Set specific mesh-size for the meshes at boundaries.
+
+        :param max_h: Maximum size for the elements in the boundaries.
+        :type max_h: float
+        """
         self.refine_BC = True
         self.BC_max_h = max_h
 
-    def setAbsorption(self, physicalGroup, absorptionCoefsByBand):
-        """ For a given surface name, set the absorption coefficients for each band. """
-        self.impedancesByBand[physicalGroup] = {}
+    def setAbsorption(self, physicalGroupName, absorptionCoefsByBand):
+        """For a given surface name, set the absorption coefficients for each band.
+
+        :param physicalGroupName: Physical group name(GMSH) of the impedance surface
+        :type physicalGroupName: string
+        :param absorptionCoefsByBand: Dictionary with the absorption coef. for each band
+        :type absorptionCoefsByBand: Dict(string;float)
+        """
+        self.impedancesByBand[physicalGroupName] = {}
         for band in absorptionCoefsByBand:
             ref_coef=np.sqrt(1-absorptionCoefsByBand[band])
             impedancesByBand = (1+ref_coef)/(1-ref_coef)
-            self.impedancesByBand[physicalGroup][band] = impedancesByBand
+            self.impedancesByBand[physicalGroupName][band] = impedancesByBand
 
-    def setImpedance(self, physicalGroup, impedancesByBand):
-        """ For a given surface name, set the impedance for each band. """
-        self.impedancesByBand[physicalGroup] = impedancesByBand
+    def setImpedance(self, physicalGroupName, impedancesByBand):
+        """For a given surface name, set the impedance for each band.
+
+        :param physicalGroupName: Physical group name(GMSH) of the impedance surface
+        :type physicalGroupName: string
+        :param impedancesByBand: Dictionary with the complex impedance for each band
+        :type impedancesByBand: Dict(string;float)
+        """
+        self.impedancesByBand[physicalGroupName] = impedancesByBand
 
     def readGeometryDXF(self,file):
-        """ Read a geometry described in the DXF format. """
+        """Read a geometry described in the DXF format.
+
+        :param file: File name/path
+        :type file: String
+        """
         m = fem3d.Mesh(file)
         m.readDXF(file)
         self.setMesh(m)
 
     def readGeometryGEO(self,file):
-        """ Read a geometry described in GEO format. """
+        """Read a geometry described in GEO format.
+
+        :param file: File name/path
+        :type file: String
+        """
         m = fem3d.Mesh(file)
         m.readGeo(file)
         self.setMesh(m)
 
     def setMesh(self, mesh: fem3d.Mesh):
-        """ Set the mesh instance and load the surfaces. """
+        """Set the mesh instance and load the surfaces.
+
+        :param mesh: Mesh instance.
+        :type mesh: FEM_3D.Mesh
+        """
         self.mesh = mesh
         for dimTag in self.mesh.model.getPhysicalGroups():
             self.GroupTags[self.mesh.model.getPhysicalName(dimTag[0],dimTag[1])] = dimTag
 
     def setOutputPath(self, path):
-        """ Set the output to the WAV files from the source and receivers. """
+        """Set the output to the WAV files from the source and receivers.
+
+        :param path: Folder path
+        :type path: string
+        """
         self.outputPath = path
 
     def run(self): #TODO: Write status?
-        """ Run the simulation for each band and stores its results. """
+        """Run the simulation for each band and stores its results.
+
+        :return: (For each band)The array with the time steps, 
+        The source signals (monopole, pressure at 1 meter distant), 
+        The "measured" signals at the receiver points
+        :rtype: Dict(String;Array), Dict(String;Array), Dict(String;Array(Array))
+        """
         source_signals = {}
         time_arrays = {}
         receiver_signals = {}
@@ -129,7 +193,7 @@ class Simulation():
 
             self.mesh.fac.synchronize()
             pTags = self.mesh.model.getEntities(0)
-            self.mesh.model.occ.setMeshSize(pTags,h)
+            self.mesh.model.mesh.setSize(pTags,h)
             self.mesh.model.mesh.setSize(pTags,h)
 
             #Impedance Surfaces Refinement
@@ -139,7 +203,7 @@ class Simulation():
                     material_tag = groups_tags[material]
                     materialSurfaceTag = self.mesh.model.getEntitiesForPhysicalGroup(material_tag[0],material_tag[1])
                     pSurfaceTag = self.mesh.model.getBoundary([(2,i) for i in materialSurfaceTag],recursive=True)
-                    self.mesh.model.occ.setMeshSize(pSurfaceTag,h_bc)
+                    self.mesh.model.mesh.setSize(pSurfaceTag,h_bc)
                     self.mesh.model.mesh.setSize(pSurfaceTag,h_bc)
 
             self.mesh.fac.synchronize()
@@ -159,7 +223,7 @@ class Simulation():
                 Z = material_impedances[material][band]
                 material_tag = groups_tags[material][1]
 
-                M_2d,nodeTags_imp = Boundary.Impedance_Damping_Matrix(self.mesh,material_tag)
+                M_2d,nodeTags_imp = Boundary.Surface_Mass_Matrix(self.mesh,material_tag)
                 nodeTags_idx = np.where(nodeTags_imp[:,None]==self.mesh.nodeTags)[1]
                 idx_row = nodeTags_idx[M_2d.row]
                 idx_col = nodeTags_idx[M_2d.col]
@@ -194,9 +258,9 @@ class Simulation():
             s,s_main = tengine.solve(tspan,F,idx_xR,[],1)
             receiver_signals[band] = s_main.T
             time_arrays[band] = tspan
-            source_signals[band] = - time_monopole/(4*np.pi) #TODO Describe the negative sign
+            source_signals[band] = - time_monopole/(4*np.pi)
 
-            self.saveOutput(band, self.nameSource,source_signals[band],receiver_signals[band],16000)
+            self.saveWav(band, self.nameSource,source_signals[band],receiver_signals[band],16000)
 
             t2_band = time.time()
             print('Simulation time (' + band + '): ', str(t2_band-t1_band))
@@ -205,10 +269,11 @@ class Simulation():
         self.time_arrays = time_arrays
         self.source_signals = source_signals
         self.receiver_signals = receiver_signals
+        self.saveSimulation()
         return time_arrays,self.source_signals,self.receiver_signals
     
     def saveParameters(self):
-        """ Store in a file parameters.txt the parameters used in the simulation. """
+        """Store in a file parameters.txt the parameters used in the simulation. """
         if (self.outputPath!=None):
             with open(self.outputPath + 'parameters.txt', 'a') as the_file:
                 the_file.write('Source:' + str(self.nameSource) + '\n')
@@ -218,8 +283,20 @@ class Simulation():
                 the_file.write('Simulation times:' + str(self.simulationsTime) + '\n')
                 the_file.write('Impedances:' + str(self.impedancesByBand) + '\n')
 
-    def saveOutput(self, band, source_name, source_signal, receiver_signals, save_fs): 
-        """ Save the signals as WAV. Source and Receivers for each band. """
+    def saveWav(self, band, source_name, source_signal, receiver_signals, save_fs): 
+        """Save the signals as WAV. Source and Receivers for each band.
+
+        :param band: Band that is being saved
+        :type band: string
+        :param source_name: Name of the source
+        :type source_name: string
+        :param source_signal: Source signal
+        :type source_signal: Array
+        :param receiver_signals: Receivers signals
+        :type receiver_signals: Array(Array)
+        :param save_fs: Sampling frequency
+        :type save_fs: int
+        """
         if (self.outputPath!=None):
             source_signal = signal.resample(source_signal,int(self.simulationsTime[band]*save_fs)).astype(np.float32)
             normalize_by = np.max(source_signal)
@@ -233,37 +310,82 @@ class Simulation():
                 receiver_signal = receiver_signal/normalize_by
                 wavfile.write(self.outputPath + str(band) + "_" + receiver_name + ".wav",save_fs,receiver_signal) 
 
+    def saveSimulation(self):
+        """Save the simulated signals
+        """
+        if (self.outputPath!=None):
+            with open(self.outputPath + 'simulation.pkl', 'wb') as f:
+                pkl.dump((self.time_arrays,self.source_signals,self.receiver_signals), f, pk.HIGHEST_PROTOCOL)
+    
+    def loadSimulation(self,pkl_path):
+        """Load the simulated signals
+
+        :param pkl_path: path to the simulation.pkl
+        :type pkl_path: str
+        """
+        with open(pkl_path, 'rb') as f:
+            self.time_arrays,self.source_signals,self.receiver_signals = pkl.load(f)
+
+    def __ressample_pad(self,new_fs):
+        """Return all the simulated signals ressampled to the given frequency and with same size.
+
+        :param new_fs: New sampling frequency
+        :type new_fs: int
+        :return: Ressampled source signals and receiver signals
+        :rtype: Dict(String;Array), Dict(String;Array(Array))
+        """
+        resampled_source_signals = {}
+        resampled_receiver_signals = {}
+
+        durations = [self.simulationsTime[b] for b in self.simulationsTime]
+        max_duration = np.max(durations)
+        new_size = int(max_duration*new_fs)
+
+        #Resample all the signals from the source and the selected receiver 
+        for band in self.source_signals:
+            new_ressample_size = int(np.max(self.time_arrays[band])*new_fs)
+            rsource = np.zeros(new_size) #Pad with zeros
+            _rsource = signal.resample(self.source_signals[band],new_ressample_size)
+            rsource[:len(_rsource)] = _rsource
+            rreceivers = []
+            for rsig in self.receiver_signals[band]:
+                rsig_new = np.zeros(new_size) #Pad with zeros
+                rsig = signal.resample(rsig,new_ressample_size)
+                rsig_new[:len(rsig)] = rsig
+                rreceivers.append(rsig_new)
+
+            resampled_source_signals[band] = rsource
+            resampled_receiver_signals[band] = rreceivers
+
+        return resampled_source_signals,resampled_receiver_signals, new_size
+
     def calcFrequencyResponse(self, receiverIndex = 0): #TODO EXPLAIN
-        """ Return the frequency response given by the simulation for the specific receiver. """
-        resampled_tspan = {}
+        """Return the frequency response given by the simulation for the specific receiver.
+
+        :param receiverIndex: Index of the receiver to be used, defaults to 0
+        :type receiverIndex: int, optional
+        :return: Frequencies and the complex frequency response
+        :rtype: Array; Array
+        """
+        # resampled_tspan = {}
         resampled_source_signals = {}
         resampled_receiver_signals = {}
         sources_fft = {}
         receivers_fft = {}
 
-        #Resample every signal to the max sampling frequency of the bands
-        max_band = str(np.max(list(map(int,self.source_signals.keys())))) #Band name/key
-
-        #Get the max sampling frequency of the simulated signals
-        max_fs = 1/(self.time_arrays[max_band][1]-self.time_arrays[max_band][0])
-
         #Resample all the signals from the source and the selected receiver 
+        fs=16000
+        resampled_source_signals,resampled_receiver_signals, new_size = self.__ressample_pad(fs)
+        
         for band in self.source_signals:
-            new_size = int(np.max(self.time_arrays[band])*max_fs)
-            rsource, rtspan = signal.resample(self.source_signals[band],new_size,self.time_arrays[band])
-            rreceiver = signal.resample(self.receiver_signals[band][receiverIndex],new_size)
-
-            resampled_tspan[band] = rtspan
-            resampled_source_signals[band] = rsource
-            resampled_receiver_signals[band] = rreceiver
-            sources_fft[band] = fft.rfft(rsource)
-            receivers_fft[band] = fft.rfft(rreceiver)
+            sources_fft[band] = fft.rfft(resampled_source_signals[band])
+            receivers_fft[band] = fft.rfft(resampled_receiver_signals[band][receiverIndex])
         
         #Include the response for each band, only for its frequencies
         frequencies = []
         response = []
         for band in self.source_signals:
-            _band_freqs = fft.rfftfreq(len(resampled_tspan[band]),1/max_fs)
+            _band_freqs = fft.rfftfreq(new_size,1/fs)
             idx_from = np.argmin(np.abs(_band_freqs-self.bands_freq[band][0]))
             idx_to = np.argmin(np.abs(_band_freqs-self.bands_freq[band][1]))
             band_response = receivers_fft[band]/sources_fft[band]
@@ -275,30 +397,35 @@ class Simulation():
 
         return frequencies, response
 
-    def getImpulseResponse(self): #TODO Impulse response from any signal
-        source_sum = np.zeros(max_size)
-        rec_sum = np.zeros(max_size)
-        bands_int = [50,63,80,100,125,160,200,250,315,400,500,630,800]
-        for bidx in range(0,len(bands_int)):
-            # if bidx==len(bands_int)-1: continue
-            if bidx==0:
-                bkey_low = str(bands_int[bidx])
-                cutoff = np.min(self.bands_freq[bkey_low])
-                ssig = self.source_signals[bkey_low]
-                rsig = self.receiver_signals[bkey_low][0]
-            else:
-                bkey_low = str(bands_int[bidx-1])
-                bkey_high = str(bands_int[bidx])
-                cutoff = np.max(self.bands_freq[bkey_low])
-                ssig = self.source_signals[bkey_high]
-                rsig = self.receiver_signals[bkey_high][0]
+    def assembleResponse(self,receiverIndex=0,fs=16000):
+        """Using the simulations for each band, assembles a "impulse response"(limited to the simulated bands)
 
-            ssig_to_filt = np.zeros(max_size)
-            ssig_to_filt[:len(ssig)] = ssig
-            rsig_to_filt = np.zeros(max_size)
-            rsig_to_filt[:len(rsig)] = rsig
+        :param receiverIndex: The index of the receiver whose response will be calculated, defaults to 0
+        :type receiverIndex: int, optional
+        :param fs: Sampling frequency of the output, defaults to 0
+        :type fs: int, optional
+        :return: The limited "impulse response"
+        :rtype: Array
+        """
+        resampled_source_signals,resampled_receiver_signals,new_size = self.__ressample_pad(fs)
+
+        assembled_source_signal = np.zeros(new_size)
+        assembled_receiver_signal = np.zeros(new_size)
+
+        for b in self.bands_freq.keys():
+            if self.simulationsTime[b]==0: continue
+            cutoff = self.bands_freq[b][0]
+            ssig = resampled_source_signals[b]
 
             filter_low = signal.firwin(1001,cutoff,pass_zero='lowpass',fs=fs)
             filter_high = signal.firwin(1001,cutoff,pass_zero='highpass',fs=fs)
-            source_sum = signal.filtfilt(filter_low,[1],source_sum) + signal.filtfilt(filter_high,[1],ssig_to_filt)
-            rec_sum = signal.filtfilt(filter_low,[1],rec_sum) + signal.filtfilt(filter_high,[1],rsig_to_filt)
+            assembled_source_signal = signal.filtfilt(filter_low,[1],assembled_source_signal) + signal.filtfilt(filter_high,[1],ssig)
+            rsig = resampled_receiver_signals[b][receiverIndex]
+            assembled_receiver_signal = signal.filtfilt(filter_low,[1],assembled_receiver_signal) + signal.filtfilt(filter_high,[1],rsig)
+        
+        #Filter the last band
+        filter_low = signal.firwin(1001,self.bands_freq[b][1],pass_zero='lowpass',fs=fs)
+        assembled_source_signal = signal.filtfilt(filter_low,[1],assembled_source_signal)
+        assembled_receiver_signal = signal.filtfilt(filter_low,[1],assembled_receiver_signal)
+
+        return Other.wiener_deconvolution(assembled_receiver_signal,assembled_source_signal,1)
